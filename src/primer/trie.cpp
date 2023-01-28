@@ -10,15 +10,22 @@ auto Trie::Get(std::string_view key) const -> const T * {
   // nullptr. After you find the node, you should use `dynamic_cast` to cast it to `const TrieNodeWithValue<T> *`. If
   // dynamic_cast returns `nullptr`, it means the type of the value is mismatched, and you should return nullptr.
   // Otherwise, return the value.
+  std::cout << "Performing get for " << key << "\n";
   size_t key_index = 0;
   auto cur = this->root_;
+  if(cur == nullptr) {
+      std::cout << "Performing get on nullptr\n";
+      return nullptr;
+  }
   while (key_index < key.size()) {
     char char_at = key.at(key_index);
+    std::cout << "At " << char_at << "\n";
     if (cur->children_.find(char_at) != cur->children_.end()) {
       cur = cur->children_.find(char_at)->second;
     } else {
       return nullptr;
     }
+    key_index++;
   }
 
   auto target = dynamic_cast<const TrieNodeWithValue<T> *>(cur.get());
@@ -33,6 +40,7 @@ auto Trie::PutFromNode(std::unique_ptr<TrieNode> new_node, std::string_view &key
     -> std::unique_ptr<TrieNode> {
   if (key_index == key.size()) {
     // TODO: Make the node a node with value
+    new_node = std::make_unique<TrieNodeWithValue<T>>(new_node->children_, std::make_shared<T>(std::move(value)));
     return new_node;
   }
 
@@ -48,7 +56,7 @@ auto Trie::PutFromNode(std::unique_ptr<TrieNode> new_node, std::string_view &key
   new_child = PutFromNode(std::move(new_child), key, key_index + 1, std::move(value));
   new_node->children_.insert(std::pair(char_at, std::move(new_child)));
 
-  return new_child;
+  return new_node;
 }
 
 template <class T>
