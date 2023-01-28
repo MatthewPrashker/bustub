@@ -6,21 +6,65 @@ namespace bustub {
 
 template <class T>
 auto Trie::Get(std::string_view key) const -> const T * {
-  throw NotImplementedException("Trie::Get is not implemented.");
-
   // You should walk through the trie to find the node corresponding to the key. If the node doesn't exist, return
   // nullptr. After you find the node, you should use `dynamic_cast` to cast it to `const TrieNodeWithValue<T> *`. If
   // dynamic_cast returns `nullptr`, it means the type of the value is mismatched, and you should return nullptr.
   // Otherwise, return the value.
+  size_t key_index = 0;
+  auto cur = this->root_;
+  while (key_index < key.size()) {
+    char char_at = key.at(key_index);
+    if (cur->children_.find(char_at) != cur->children_.end()) {
+      cur = cur->children_.find(char_at)->second;
+    } else {
+      return nullptr;
+    }
+  }
+
+  auto target = dynamic_cast<const TrieNodeWithValue<T> *>(cur.get());
+  if (target == nullptr) {
+    return nullptr;
+  }
+  return target->value_.get();
+}
+
+template <class T>
+auto Trie::PutFromNode(std::unique_ptr<TrieNode> new_node, std::string_view &key, size_t key_index, T value) const
+    -> std::unique_ptr<TrieNode> {
+  if (key_index == key.size()) {
+    // TODO: Make the node a node with value
+    return new_node;
+  }
+
+  char char_at = key.at(key_index);
+  std::unique_ptr<TrieNode> new_child;
+
+  if (new_node->children_.find(char_at) != new_node->children_.end()) {
+    new_child = new_node->children_.find(char_at)->second->Clone();
+  } else {
+    new_child = std::make_unique<TrieNode>();
+  }
+
+  new_child = PutFromNode(std::move(new_child), key, key_index + 1, std::move(value));
+  new_node->children_.insert(std::pair(char_at, std::move(new_child)));
+
+  return new_child;
 }
 
 template <class T>
 auto Trie::Put(std::string_view key, T value) const -> Trie {
   // Note that `T` might be a non-copyable type. Always use `std::move` when creating `shared_ptr` on that value.
-  throw NotImplementedException("Trie::Put is not implemented.");
-
   // You should walk through the trie and create new nodes if necessary. If the node corresponding to the key already
   // exists, you should create a new `TrieNodeWithValue`.
+  std::unique_ptr<TrieNode> new_root;
+  if (this->root_ != nullptr) {
+    new_root = this->root_->Clone();
+  } else {
+    new_root = std::make_unique<TrieNode>();
+  }
+  new_root = PutFromNode(std::move(new_root), key, 0, std::move(value));
+
+  return Trie(std::move(new_root));
 }
 
 auto Trie::Remove(std::string_view key) const -> Trie {
