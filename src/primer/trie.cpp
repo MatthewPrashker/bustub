@@ -36,9 +36,8 @@ template <class T>
 auto Trie::PutFromNode(std::unique_ptr<TrieNode> new_node, std::string_view &key, size_t key_index, std::shared_ptr<T> value) const
     -> std::unique_ptr<TrieNode> {
   if (key_index == key.size()) {
-      auto ret = std::make_unique<TrieNodeWithValue<T>>(new_node->children_, std::move(value));
-      ret->is_value_node_ = true;
-      new_node = std::move(ret);
+      new_node = std::make_unique<TrieNodeWithValue<T>>(new_node->children_, std::move(value));
+      new_node->is_value_node_ = true;
       return new_node;
   }
 
