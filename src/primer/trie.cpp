@@ -81,7 +81,11 @@ auto Trie::Put(std::string_view key, T value) const -> Trie {
 auto Trie::RemoveFromNode(std::unique_ptr<TrieNode> new_node, std::string_view &key, size_t key_index) const
     -> std::unique_ptr<TrieNode> {
   if (key_index == key.size()) {
-    new_node = std::make_unique<TrieNode>(new_node->children_);
+    if (new_node->children_.size() == 0) {
+      new_node = nullptr;
+    } else {
+      new_node = std::make_unique<TrieNode>(new_node->children_);
+    }
     return new_node;
   }
   auto child = new_node->children_.find(key.at(key_index));
@@ -90,7 +94,13 @@ auto Trie::RemoveFromNode(std::unique_ptr<TrieNode> new_node, std::string_view &
   }
   auto new_child = child->second->Clone();
   new_child = RemoveFromNode(std::move(new_child), key, key_index + 1);
-  child->second = std::move(new_child);
+
+  if (new_child == nullptr) {
+    new_node->children_.erase(child);
+  } else {
+    child->second = std::move(new_child);
+  }
+
   return new_node;
 }
 
