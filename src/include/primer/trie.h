@@ -122,7 +122,7 @@ class Trie {
   auto Put(std::string_view key, T value) const -> Trie;
 
   template <class T>
-  auto PutFromNode(std::unique_ptr<TrieNode> new_node, std::string_view &key, size_t key_index, T value) const
+  auto PutFromNode(std::unique_ptr<TrieNode> new_node, std::string_view &key, size_t key_index, std::shared_ptr<T> value) const
       -> std::unique_ptr<TrieNode>;
 
   // Remove the key from the trie. If the key does not exist, return the original trie.

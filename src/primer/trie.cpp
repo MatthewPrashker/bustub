@@ -10,16 +10,13 @@ auto Trie::Get(std::string_view key) const -> const T * {
   // nullptr. After you find the node, you should use `dynamic_cast` to cast it to `const TrieNodeWithValue<T> *`. If
   // dynamic_cast returns `nullptr`, it means the type of the value is mismatched, and you should return nullptr.
   // Otherwise, return the value.
-  std::cout << "Performing get for " << key << "\n";
   size_t key_index = 0;
   auto cur = this->root_;
   if(cur == nullptr) {
-      std::cout << "Performing get on nullptr\n";
       return nullptr;
   }
   while (key_index < key.size()) {
     char char_at = key.at(key_index);
-    std::cout << "At " << char_at << "\n";
     if (cur->children_.find(char_at) != cur->children_.end()) {
       cur = cur->children_.find(char_at)->second;
     } else {
@@ -29,33 +26,39 @@ auto Trie::Get(std::string_view key) const -> const T * {
   }
 
   auto target = dynamic_cast<const TrieNodeWithValue<T> *>(cur.get());
-  if (target == nullptr) {
-    return nullptr;
+  if(target == nullptr) {
+      return nullptr;
   }
   return target->value_.get();
 }
 
 template <class T>
-auto Trie::PutFromNode(std::unique_ptr<TrieNode> new_node, std::string_view &key, size_t key_index, T value) const
+auto Trie::PutFromNode(std::unique_ptr<TrieNode> new_node, std::string_view &key, size_t key_index, std::shared_ptr<T> value) const
     -> std::unique_ptr<TrieNode> {
   if (key_index == key.size()) {
-    // TODO: Make the node a node with value
-    new_node = std::make_unique<TrieNodeWithValue<T>>(new_node->children_, std::make_shared<T>(std::move(value)));
-    return new_node;
+      auto ret = std::make_unique<TrieNodeWithValue<T>>(new_node->children_, std::move(value));
+      ret->is_value_node_ = true;
+      new_node = std::move(ret);
+      return new_node;
   }
 
   char char_at = key.at(key_index);
   std::unique_ptr<TrieNode> new_child;
 
   if (new_node->children_.find(char_at) != new_node->children_.end()) {
-    new_child = new_node->children_.find(char_at)->second->Clone();
+      auto child = new_node->children_.find(char_at)->second;
+      new_child = child->Clone();
   } else {
     new_child = std::make_unique<TrieNode>();
   }
 
-  new_child = PutFromNode(std::move(new_child), key, key_index + 1, std::move(value));
-  new_node->children_.insert(std::pair(char_at, std::move(new_child)));
+  new_child = PutFromNode(std::move(new_child), key, key_index + 1, value);
 
+  if(new_node->children_.find(char_at) != new_node->children_.end()) {
+      new_node->children_.find(char_at)->second = std::move(new_child);
+  } else {
+      new_node->children_.insert(std::pair(char_at, std::move(new_child)));
+  }
   return new_node;
 }
 
@@ -70,7 +73,8 @@ auto Trie::Put(std::string_view key, T value) const -> Trie {
   } else {
     new_root = std::make_unique<TrieNode>();
   }
-  new_root = PutFromNode(std::move(new_root), key, 0, std::move(value));
+  auto val = std::make_shared<T>(std::move(value));
+  new_root = std::move(PutFromNode(std::move(new_root), key, 0, val));
 
   return Trie(std::move(new_root));
 }
@@ -105,7 +109,7 @@ using Integer = std::unique_ptr<uint32_t>;
 template auto Trie::Put(std::string_view key, Integer value) const -> Trie;
 template auto Trie::Get(std::string_view key) const -> const Integer *;
 
-template auto Trie::Put(std::string_view key, MoveBlocked value) const -> Trie;
-template auto Trie::Get(std::string_view key) const -> const MoveBlocked *;
+//template auto Trie::Put(std::string_view key, MoveBlocked value) const -> Trie;
+//template auto Trie::Get(std::string_view key) const -> const MoveBlocked *;
 
 }  // namespace bustub
