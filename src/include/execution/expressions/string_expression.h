@@ -49,6 +49,7 @@ class StringExpression : public AbstractExpression {
     switch (this->expr_type_) {
       case StringExpressionType::Lower:
         for (char c : val) {
+          BUSTUB_ENSURE(('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z'), "Invalid Char for Upper/Lower");
           if ('A' <= c && c <= 'Z') {
             ret += 'a' + (c - 'A');
           } else {
@@ -58,6 +59,7 @@ class StringExpression : public AbstractExpression {
         return ret;
       case StringExpressionType::Upper:
         for (char c : val) {
+          BUSTUB_ENSURE(('a' <= c && c <= 'z') || ('A' <= c && c <= 'Z'), "Invalid Char for Upper/Lower");
           if ('a' <= c && c <= 'z') {
             ret += 'A' + (c - 'a');
           } else {
