@@ -48,40 +48,41 @@ void LRUKNode::InsertHistoryTimestamp(size_t current_timestamp) {
 
 LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_frames), k_(k) {}
 
-LRUKReplacer::~LRUKReplacer() {
-
-};
+LRUKReplacer::~LRUKReplacer() {}
 
 auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool { return false; }
 
 void LRUKReplacer::RecordAccess(frame_id_t frame_id) {
-    BUSTUB_ASSERT((unsigned long) frame_id < this->replacer_size_, "Record Access for Invalid Frame Id");
+  BUSTUB_ASSERT((size_t)frame_id < this->replacer_size_, "Record Access for Invalid Frame Id");
   auto now = std::chrono::system_clock::now();
-  auto timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
+  size_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
 
   auto frame_it = this->node_store_.find(frame_id);
-  if(frame_it == this->node_store_.end()) {
-      // Seeing frame_id for first time
-      this->node_store_.insert(std::pair(frame_id, LRUKNode(this->k_, frame_id)));
+  if (frame_it == this->node_store_.end()) {
+    // Seeing frame_id for first time
+    this->node_store_.insert(std::pair(frame_id, LRUKNode(this->k_, frame_id)));
   } else {
-        auto node = frame_it->second;
-        node.InsertHistoryTimestamp(timestamp);
+    auto node = frame_it->second;
+    node.InsertHistoryTimestamp(timestamp);
   }
 }
 
 void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
-    auto frame_it = this->node_store_.find(frame_id);
-    BUSTUB_ASSERT(frame_it != this->node_store_.end(), "Evicting Frame which does not Exist");
+  auto frame_it = this->node_store_.find(frame_id);
+  BUSTUB_ASSERT(frame_it != this->node_store_.end(), "Evicting Frame which does not Exist");
 
-    auto prev_evictable = frame_it->second.IsEvictable();
-    frame_it->second.SetEvictable(set_evictable);
+  auto prev_evictable = frame_it->second.IsEvictable();
+  frame_it->second.SetEvictable(set_evictable);
 
-    if(prev_evictable) {--this->curr_size_;}
-    if(set_evictable) {++this->curr_size_;}
+  if (prev_evictable) {
+    --this->curr_size_;
+  }
+  if (set_evictable) {
+    ++this->curr_size_;
+  }
 }
 
-void LRUKReplacer::Remove(frame_id_t frame_id) {
-}
+void LRUKReplacer::Remove(frame_id_t frame_id) {}
 
 auto LRUKReplacer::Size() -> size_t { return this->curr_size_; }
 

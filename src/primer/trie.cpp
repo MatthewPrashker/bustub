@@ -81,7 +81,7 @@ auto Trie::Put(std::string_view key, T value) const -> Trie {
 auto Trie::RemoveFromNode(std::unique_ptr<TrieNode> new_node, std::string_view &key, size_t key_index) const
     -> std::unique_ptr<TrieNode> {
   if (key_index == key.size()) {
-    if (new_node->children_.size() == 0) {
+    if (new_node->children_.empty()) {
       new_node = nullptr;
     } else {
       new_node = std::make_unique<TrieNode>(new_node->children_);
