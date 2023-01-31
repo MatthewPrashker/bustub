@@ -16,6 +16,7 @@
 #include <list>
 #include <mutex>  // NOLINT
 #include <unordered_map>
+#include <unordered_set>
 #include <vector>
 
 #include "common/config.h"
@@ -72,7 +73,7 @@ class LRUKReplacer {
    *
    * @brief Destroys the LRUReplacer.
    */
-  ~LRUKReplacer() = default;
+  ~LRUKReplacer();
 
   /**
    * TODO(P1): Add implementation
