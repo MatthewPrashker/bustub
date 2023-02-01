@@ -50,7 +50,50 @@ LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_fra
 
 LRUKReplacer::~LRUKReplacer() {}
 
-auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool { return false; }
+auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
+  std::vector<frame_id_t> inf_back_ids;
+  std::vector<frame_id_t> n_inf_back_ids;
+  for (auto node_it = this->node_store_.begin(); node_it != this->node_store_.end(); node_it++) {
+    auto node = node_it->second;
+    if (!node.IsEvictable()) {
+      continue;
+    }
+    if (node.HasInfBackwardKDist()) {
+      inf_back_ids.push_back(node_it->first);
+    } else {
+      n_inf_back_ids.push_back(node_it->first);
+    }
+  }
+  if (inf_back_ids.size() > 0) {
+    auto evict_id = inf_back_ids[0];
+    auto earliest_ts = this->node_store_.find(inf_back_ids[0])->second.GetEarliestTimestamp();
+    for (size_t i = 1; i < inf_back_ids.size(); i++) {
+      auto cur_ts = this->node_store_.find(inf_back_ids[i])->second.GetEarliestTimestamp();
+      if (cur_ts < earliest_ts) {
+        earliest_ts = cur_ts;
+        evict_id = i;
+      }
+    }
+    *frame_id = evict_id;
+    return true;
+  } else if (n_inf_back_ids.size() > 0) {
+    auto now = std::chrono::system_clock::now();
+    size_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
+    auto evict_id = n_inf_back_ids[0];
+    auto earliest_ts = this->node_store_.find(n_inf_back_ids[0])->second.GetBackwardKDist(timestamp);
+    for (size_t i = 1; i < n_inf_back_ids.size(); i++) {
+      auto cur_ts = this->node_store_.find(n_inf_back_ids[i])->second.GetBackwardKDist(timestamp);
+      if (cur_ts < earliest_ts) {
+        earliest_ts = cur_ts;
+        evict_id = i;
+      }
+    }
+    *frame_id = evict_id;
+    return true;
+  } else {
+    return false;
+  }
+}
 
 void LRUKReplacer::RecordAccess(frame_id_t frame_id) {
   BUSTUB_ASSERT((size_t)frame_id < this->replacer_size_, "Record Access for Invalid Frame Id");
@@ -82,7 +125,16 @@ void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
   }
 }
 
-void LRUKReplacer::Remove(frame_id_t frame_id) {}
+void LRUKReplacer::Remove(frame_id_t frame_id) {
+  BUSTUB_ASSERT((size_t)frame_id < this->replacer_size_, "Removing Invalid Frame");
+  auto frame_it = this->node_store_.find(frame_id);
+  BUSTUB_ASSERT(frame_it != this->node_store_.end(), "Removing Invalid Frame");
+  auto frame = frame_it->second;
+  BUSTUB_ASSERT(frame.IsEvictable(), "Removing Non-Evictable Frame");
+
+  this->node_store_.erase(frame_it);
+  this->curr_size_ -= 1;
+}
 
 auto LRUKReplacer::Size() -> size_t { return this->curr_size_; }
 
