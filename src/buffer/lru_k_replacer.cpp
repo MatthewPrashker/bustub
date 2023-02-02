@@ -53,6 +53,7 @@ LRUKReplacer::~LRUKReplacer() {}
 auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
   std::vector<frame_id_t> inf_back_ids;
   std::vector<frame_id_t> n_inf_back_ids;
+
   for (auto node_it = this->node_store_.begin(); node_it != this->node_store_.end(); node_it++) {
     auto node = node_it->second;
     if (!node.IsEvictable()) {
@@ -65,30 +66,35 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
     }
   }
   if (inf_back_ids.size() > 0) {
+    // There is at least one node with infinite backwards k-distance,
+    // So among these nodes, we look at the one with the earliest time-stamp
     auto evict_id = inf_back_ids[0];
     auto earliest_ts = this->node_store_.find(inf_back_ids[0])->second.GetEarliestTimestamp();
     for (size_t i = 1; i < inf_back_ids.size(); i++) {
       auto cur_ts = this->node_store_.find(inf_back_ids[i])->second.GetEarliestTimestamp();
       if (cur_ts < earliest_ts) {
         earliest_ts = cur_ts;
-        evict_id = i;
+        evict_id = inf_back_ids[i];
       }
     }
     *frame_id = evict_id;
+    this->Remove(evict_id);
     return true;
   } else if (n_inf_back_ids.size() > 0) {
+    // Evict the node with the largest backwards k-dist
     auto now = std::chrono::system_clock::now();
     size_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
     auto evict_id = n_inf_back_ids[0];
-    auto earliest_ts = this->node_store_.find(n_inf_back_ids[0])->second.GetBackwardKDist(timestamp);
+    auto largest_k_dist = this->node_store_.find(n_inf_back_ids[0])->second.GetBackwardKDist(timestamp);
     for (size_t i = 1; i < n_inf_back_ids.size(); i++) {
-      auto cur_ts = this->node_store_.find(n_inf_back_ids[i])->second.GetBackwardKDist(timestamp);
-      if (cur_ts < earliest_ts) {
-        earliest_ts = cur_ts;
-        evict_id = i;
+      auto cur_k_dist = this->node_store_.find(n_inf_back_ids[i])->second.GetBackwardKDist(timestamp);
+      if (cur_k_dist > largest_k_dist) {
+        largest_k_dist = cur_k_dist;
+        evict_id = n_inf_back_ids[i];
       }
     }
     *frame_id = evict_id;
+    this->Remove(evict_id);
     return true;
   } else {
     return false;
@@ -96,18 +102,14 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
 }
 
 void LRUKReplacer::RecordAccess(frame_id_t frame_id) {
-  BUSTUB_ASSERT((size_t)frame_id < this->replacer_size_, "Record Access for Invalid Frame Id");
   auto now = std::chrono::system_clock::now();
   size_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
 
-  auto frame_it = this->node_store_.find(frame_id);
-  if (frame_it == this->node_store_.end()) {
-    // Seeing frame_id for first time
+  if (this->node_store_.find(frame_id) == this->node_store_.end()) {
+    // First time we are seeing this frame_id
     this->node_store_.insert(std::pair(frame_id, LRUKNode(this->k_, frame_id)));
-  } else {
-    auto node = frame_it->second;
-    node.InsertHistoryTimestamp(timestamp);
   }
+  this->node_store_.find(frame_id)->second.InsertHistoryTimestamp(timestamp);
 }
 
 void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
@@ -126,7 +128,6 @@ void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
 }
 
 void LRUKReplacer::Remove(frame_id_t frame_id) {
-  BUSTUB_ASSERT((size_t)frame_id < this->replacer_size_, "Removing Invalid Frame");
   auto frame_it = this->node_store_.find(frame_id);
   BUSTUB_ASSERT(frame_it != this->node_store_.end(), "Removing Invalid Frame");
   auto frame = frame_it->second;
