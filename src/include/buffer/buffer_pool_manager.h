@@ -71,6 +71,8 @@ class BufferPoolManager {
    */
   auto NewPage(page_id_t *page_id) -> Page *;
 
+  auto GetFreeFrame(frame_id_t *frame_id) -> bool;
+
   /**
    * TODO(P1): Add implementation
    *

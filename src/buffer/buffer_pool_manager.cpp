@@ -21,10 +21,6 @@ namespace bustub {
 BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager, size_t replacer_k,
                                      LogManager *log_manager)
     : pool_size_(pool_size), disk_manager_(disk_manager), log_manager_(log_manager) {
-  // TODO(students): remove this line after you have implemented the buffer pool manager
-  throw NotImplementedException(
-      "BufferPoolManager is not implemented yet. If you have finished implementing BPM, please remove the throw "
-      "exception line in `buffer_pool_manager.cpp`.");
 
   // we allocate a consecutive memory space for the buffer pool
   pages_ = new Page[pool_size_];
@@ -38,7 +34,41 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager
 
 BufferPoolManager::~BufferPoolManager() { delete[] pages_; }
 
-auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * { return nullptr; }
+auto BufferPoolManager::GetFreeFrame(frame_id_t *frame_id) -> bool {
+    if(this->free_list_.size() > 0) {
+        *frame_id = this->free_list_.front();
+        this->free_list_.pop_front();
+        return true;
+    } else {
+        // Try to evict a page
+        if(this->replacer_->Evict(frame_id)) {
+            return true;
+        }
+    }
+    return false;
+}
+
+auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
+    frame_id_t n_frame;
+    if(!this->GetFreeFrame(&n_frame)) {return nullptr;}
+
+    // Handle existing page in the frame
+    auto e_page = &this->pages_[n_frame];
+    if(e_page->IsDirty()) {
+        this->disk_manager_->WritePage(e_page->page_id_, e_page->data_);
+    }
+
+    // Reset page at the frame
+    e_page->ResetMemory();
+    page_id_t n_page_id = this->AllocatePage();
+    e_page->page_id_ = n_page_id;
+    this->replacer_->SetEvictable(n_frame, false);
+    this->replacer_->RecordAccess(n_frame);
+
+    this->page_table_[n_page_id] = n_frame;
+    *page_id = n_page_id;
+    return e_page;
+}
 
 auto BufferPoolManager::FetchPage(page_id_t page_id) -> Page * { return nullptr; }
 
@@ -46,7 +76,9 @@ auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) -> bool { re
 
 auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool { return false; }
 
-void BufferPoolManager::FlushAllPages() {}
+void BufferPoolManager::FlushAllPages() {
+
+}
 
 auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool { return false; }
 
