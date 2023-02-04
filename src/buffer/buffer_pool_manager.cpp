@@ -21,7 +21,6 @@ namespace bustub {
 BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager, size_t replacer_k,
                                      LogManager *log_manager)
     : pool_size_(pool_size), disk_manager_(disk_manager), log_manager_(log_manager) {
-
   // we allocate a consecutive memory space for the buffer pool
   pages_ = new Page[pool_size_];
   replacer_ = std::make_unique<LRUKReplacer>(pool_size, replacer_k);
@@ -36,129 +35,133 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager
 BufferPoolManager::~BufferPoolManager() { delete[] pages_; }
 
 auto BufferPoolManager::GetFreeFrame(frame_id_t *frame_id) -> bool {
-    if(this->free_list_.size() > 0) {
-        *frame_id = this->free_list_.front();
-        this->free_list_.pop_front();
-        return true;
-    } else {
-        // Try to evict a page
-        if(this->replacer_->Evict(frame_id)) {
-            return true;
-        }
+  if (this->free_list_.size() > 0) {
+    *frame_id = this->free_list_.front();
+    this->free_list_.pop_front();
+    return true;
+  } else {
+    // Try to evict a page
+    if (this->replacer_->Evict(frame_id)) {
+      return true;
     }
-    return false;
+  }
+  return false;
 }
 
 auto BufferPoolManager::ReplaceFrame(frame_id_t frame_id, page_id_t n_page_id) {
-        auto e_page = &this->pages_[frame_id];
-        if(e_page->IsDirty()) {
-            this->disk_manager_->WritePage(e_page->page_id_, e_page->data_);
-        }
+  auto e_page = &this->pages_[frame_id];
+  if (e_page->IsDirty()) {
+    this->disk_manager_->WritePage(e_page->page_id_, e_page->data_);
+  }
 
-        e_page->ResetMemory();
-        e_page->page_id_ = n_page_id;
-        this->replacer_->SetEvictable(frame_id, false);
-        this->replacer_->RecordAccess(frame_id);
-        this->page_table_[n_page_id] = frame_id;
-    }
-
-auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
-    frame_id_t n_frame;
-    if(!this->GetFreeFrame(&n_frame)) {return nullptr;}
-
-    frame_id_t n_page_id = this->AllocatePage();
-    this->ReplaceFrame(n_frame, n_page_id);
-
-    *page_id = n_page_id;
-    return &this->pages_[n_frame];
+  e_page->ResetMemory();
+  e_page->page_id_ = n_page_id;
+  e_page->pin_count_ = 1;
+  this->replacer_->RecordAccess(frame_id);
+  this->replacer_->SetEvictable(frame_id, false);
+  this->page_table_[n_page_id] = frame_id;
 }
 
+auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
+  frame_id_t n_frame;
+  if (!this->GetFreeFrame(&n_frame)) {
+    return nullptr;
+  }
+
+  frame_id_t n_page_id = this->AllocatePage();
+  this->ReplaceFrame(n_frame, n_page_id);
+
+  *page_id = n_page_id;
+  return &this->pages_[n_frame];
+}
 
 auto BufferPoolManager::FetchPage(page_id_t page_id) -> Page * {
-    auto frame_it = this->page_table_.find(page_id);
-    if(frame_it != this->page_table_.end()) {
-        // Page is currently in Buffer Pool
-        return &this->pages_[frame_it->second];
-    }
+  auto frame_it = this->page_table_.find(page_id);
+  if (frame_it != this->page_table_.end()) {
+    // Page is currently in Buffer Pool
+    return &this->pages_[frame_it->second];
+  }
 
-    // At this point, we need to bring in the page from disk
-    // So we find a frame we can use ...
+  // At this point, we need to bring in the page from disk
+  // So we find a frame we can use ...
 
-    frame_id_t n_frame_id;
-    if(!this->GetFreeFrame(&n_frame_id)) {
-        return nullptr;
-    }
+  frame_id_t n_frame_id;
+  if (!this->GetFreeFrame(&n_frame_id)) {
+    return nullptr;
+  }
 
-    // ... clear the old page in that frame, and read in the new page.
+  // ... clear the old page in that frame, and read in the new page.
 
-    this->ReplaceFrame(n_frame_id, page_id);
-    this->disk_manager_->ReadPage(page_id, this->pages_[n_frame_id].data_);
-    return &this->pages_[n_frame_id];
+  this->ReplaceFrame(n_frame_id, page_id);
+  this->disk_manager_->ReadPage(page_id, this->pages_[n_frame_id].data_);
+  return &this->pages_[n_frame_id];
 }
 
 auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) -> bool {
-    auto page_it = this->page_table_.find(page_id);
-    if(page_it == this->page_table_.end()) {
-        return false;
-    }
+  auto page_it = this->page_table_.find(page_id);
+  if (page_it == this->page_table_.end()) {
+    return false;
+  }
 
-    auto frame_index = page_it->second;
-    auto page = &this->pages_[frame_index];
-    if(page->pin_count_ == 0) {
-        return false;
-    }
-    if(is_dirty) {page->is_dirty_ = true;}
+  auto frame_index = page_it->second;
+  auto page = &this->pages_[frame_index];
+  if (page->pin_count_ == 0) {
+    return false;
+  }
+  if (is_dirty) {
+    page->is_dirty_ = true;
+  }
 
-    --page->pin_count_;
+  --page->pin_count_;
 
-
-    if(page->pin_count_ == 0) {
-        this->replacer_->SetEvictable(frame_index, true);
-    }
-    return true;
+  if (page->pin_count_ == 0) {
+    this->replacer_->SetEvictable(frame_index, true);
+  }
+  return true;
 }
 
 auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
-    auto page_it = this->page_table_.find(page_id);
-    if(page_it == this->page_table_.end()) {return false;}
+  auto page_it = this->page_table_.find(page_id);
+  if (page_it == this->page_table_.end()) {
+    return false;
+  }
 
-    auto frame_id = page_it->second;
-    auto page = &this->pages_[frame_id];
-    this->disk_manager_->WritePage(page_id, page->data_);
-    page->is_dirty_ = false;
-    return true;
+  auto frame_id = page_it->second;
+  auto page = &this->pages_[frame_id];
+  this->disk_manager_->WritePage(page_id, page->data_);
+  page->is_dirty_ = false;
+  return true;
 }
 
 void BufferPoolManager::FlushAllPages() {
-    for(auto page_it = this->page_table_.begin(); page_it != this->page_table_.end(); page_it++) {
-        auto page_id = page_it->first;
-        this->FlushPage(page_id);
-    }
+  for (auto page_it = this->page_table_.begin(); page_it != this->page_table_.end(); page_it++) {
+    auto page_id = page_it->first;
+    this->FlushPage(page_id);
+  }
 }
 
 auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
+  auto page_it = this->page_table_.find(page_id);
+  if (page_it == this->page_table_.end()) {
+    return false;
+  }
 
-    auto page_it = this->page_table_.find(page_id);
-    if(page_it == this->page_table_.end()) {
-        return false;
-    }
+  auto frame_id = page_it->second;
+  auto page = &this->pages_[frame_id];
+  if (page->GetPinCount() > 0) {
+    return false;
+  }
 
-    auto frame_id = page_it->second;
-    auto page = &this->pages_[frame_id];
-    if(page->GetPinCount() > 0) {
-        return false;
-    }
+  this->page_table_.erase(page_it);
+  this->replacer_->Remove(frame_id);
+  this->free_list_.push_back(frame_id);
 
-    this->page_table_.erase(page_it);
-    this->replacer_->Remove(frame_id);
-    this->free_list_.push_back(frame_id);
+  page->ResetMemory();
+  page->pin_count_ = 0;
+  page->is_dirty_ = false;
 
-    page->ResetMemory();
-    page->pin_count_ = 0;
-    page->is_dirty_ = false;
-
-    DeallocatePage(page_id);
-    return true;
+  DeallocatePage(page_id);
+  return true;
 }
 
 auto BufferPoolManager::AllocatePage() -> page_id_t { return next_page_id_++; }
