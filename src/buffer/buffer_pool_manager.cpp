@@ -28,7 +28,6 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager
   // Initially, every page is in the free list.
   for (size_t i = 0; i < pool_size_; ++i) {
     free_list_.emplace_back(static_cast<int>(i));
-    this->replacer_->RecordAccess(i);
   }
 }
 
@@ -52,6 +51,11 @@ auto BufferPoolManager::ReplaceFrame(frame_id_t frame_id, page_id_t n_page_id) {
   auto e_page = &this->pages_[frame_id];
   if (e_page->IsDirty()) {
     this->disk_manager_->WritePage(e_page->page_id_, e_page->data_);
+  }
+
+  auto e_page_it = this->page_table_.find(e_page->page_id_);
+  if(e_page_it != this->page_table_.end()) {
+      this->page_table_.erase(e_page_it);
   }
 
   e_page->ResetMemory();
@@ -159,6 +163,7 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
   page->ResetMemory();
   page->pin_count_ = 0;
   page->is_dirty_ = false;
+  page->page_id_ = INVALID_PAGE_ID;
 
   DeallocatePage(page_id);
   return true;
