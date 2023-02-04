@@ -29,6 +29,7 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager
   // Initially, every page is in the free list.
   for (size_t i = 0; i < pool_size_; ++i) {
     free_list_.emplace_back(static_cast<int>(i));
+    this->replacer_->RecordAccess(i);
   }
 }
 
@@ -95,15 +96,70 @@ auto BufferPoolManager::FetchPage(page_id_t page_id) -> Page * {
     return &this->pages_[n_frame_id];
 }
 
-auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) -> bool { return false; }
+auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty) -> bool {
+    auto page_it = this->page_table_.find(page_id);
+    if(page_it == this->page_table_.end()) {
+        return false;
+    }
 
-auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool { return false; }
+    auto frame_index = page_it->second;
+    auto page = &this->pages_[frame_index];
+    if(page->pin_count_ == 0) {
+        return false;
+    }
+    if(is_dirty) {page->is_dirty_ = true;}
 
-void BufferPoolManager::FlushAllPages() {
+    --page->pin_count_;
 
+
+    if(page->pin_count_ == 0) {
+        this->replacer_->SetEvictable(frame_index, true);
+    }
+    return true;
 }
 
-auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool { return false; }
+auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
+    auto page_it = this->page_table_.find(page_id);
+    if(page_it == this->page_table_.end()) {return false;}
+
+    auto frame_id = page_it->second;
+    auto page = &this->pages_[frame_id];
+    this->disk_manager_->WritePage(page_id, page->data_);
+    page->is_dirty_ = false;
+    return true;
+}
+
+void BufferPoolManager::FlushAllPages() {
+    for(auto page_it = this->page_table_.begin(); page_it != this->page_table_.end(); page_it++) {
+        auto page_id = page_it->first;
+        this->FlushPage(page_id);
+    }
+}
+
+auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
+
+    auto page_it = this->page_table_.find(page_id);
+    if(page_it == this->page_table_.end()) {
+        return false;
+    }
+
+    auto frame_id = page_it->second;
+    auto page = &this->pages_[frame_id];
+    if(page->GetPinCount() > 0) {
+        return false;
+    }
+
+    this->page_table_.erase(page_it);
+    this->replacer_->Remove(frame_id);
+    this->free_list_.push_back(frame_id);
+
+    page->ResetMemory();
+    page->pin_count_ = 0;
+    page->is_dirty_ = false;
+
+    DeallocatePage(page_id);
+    return true;
+}
 
 auto BufferPoolManager::AllocatePage() -> page_id_t { return next_page_id_++; }
 
