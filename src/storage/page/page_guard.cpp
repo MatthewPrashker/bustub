@@ -13,9 +13,7 @@ BasicPageGuard::BasicPageGuard(BasicPageGuard &&that) noexcept {
   that.is_dirty_ = false;
 }
 
-void BasicPageGuard::Drop() {
-    this->bpm_->UnpinPage(this->page_->GetPageId(), this->is_dirty_);
-}
+void BasicPageGuard::Drop() { this->bpm_->UnpinPage(this->page_->GetPageId(), this->is_dirty_); }
 
 auto BasicPageGuard::operator=(BasicPageGuard &&that) noexcept -> BasicPageGuard & {
   if (this == &that) {

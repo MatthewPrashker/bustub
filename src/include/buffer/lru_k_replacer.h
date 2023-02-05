@@ -27,6 +27,16 @@ namespace bustub {
 enum class AccessType { Unknown = 0, Get, Scan };
 
 class LRUKNode {
+ public:
+  LRUKNode(size_t k, frame_id_t fid);
+  void SetEvictable(bool evictable);
+  auto IsEvictable() -> bool;
+  auto GetFid() -> frame_id_t;
+  auto GetBackwardKDist(size_t current_timestamp) -> size_t;
+  auto HasInfBackwardKDist() -> bool;
+  auto GetEarliestTimestamp() -> size_t;
+  void InsertHistoryTimestamp(size_t current_timestamp);
+
  private:
   /** History of last seen K timestamps of this page. Least recent timestamp stored in front. */
   // Remove maybe_unused if you start using them. Feel free to change the member variables as you want.
