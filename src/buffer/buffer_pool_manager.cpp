@@ -47,12 +47,22 @@ auto BufferPoolManager::GetFreeFrame(frame_id_t *frame_id) -> bool {
   return false;
 }
 
+<<<<<<< HEAD
 
 void BufferPoolManager::ReplaceFrame(frame_id_t frame_id, page_id_t n_page_id) {
   auto e_page = &this->pages_[frame_id];
   if (e_page->IsDirty()) {
     this->disk_manager_->WritePage(e_page->page_id_, e_page->data_);
   }
+=======
+auto BufferPoolManager::FetchPage(page_id_t page_id, [[maybe_unused]] AccessType access_type) -> Page * {
+  return nullptr;
+}
+
+auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unused]] AccessType access_type) -> bool {
+  return false;
+}
+>>>>>>> public/master
 
   auto e_page_it = this->page_table_.find(e_page->page_id_);
   if (e_page_it != this->page_table_.end()) {

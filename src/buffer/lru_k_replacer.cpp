@@ -15,6 +15,7 @@
 
 namespace bustub {
 
+<<<<<<< HEAD
 LRUKNode::LRUKNode(size_t k, frame_id_t fid) : k_(k), fid_(fid) {}
 
 void LRUKNode::SetEvictable(bool evictable) { this->is_evictable_ = evictable; }
@@ -46,13 +47,19 @@ void LRUKNode::InsertHistoryTimestamp(size_t current_timestamp) {
   }
 }
 
+=======
+>>>>>>> public/master
 LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_frames), k_(k) {}
 
 LRUKReplacer::~LRUKReplacer() {}
 
+<<<<<<< HEAD
 auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
   std::vector<frame_id_t> inf_back_ids;
   std::vector<frame_id_t> n_inf_back_ids;
+=======
+void LRUKReplacer::RecordAccess(frame_id_t frame_id, [[maybe_unused]] AccessType access_type) {}
+>>>>>>> public/master
 
   for (auto node_it = this->node_store_.begin(); node_it != this->node_store_.end(); node_it++) {
     auto node = node_it->second;
