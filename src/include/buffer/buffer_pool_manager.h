@@ -73,7 +73,7 @@ class BufferPoolManager {
 
   auto GetFreeFrame(frame_id_t *frame_id) -> bool;
 
-  auto ReplaceFrame(frame_id_t frame_id, page_id_t n_page_id);
+  void ReplaceFrame(frame_id_t frame_id, page_id_t n_page_id);
 
   /**
    * TODO(P1): Add implementation
