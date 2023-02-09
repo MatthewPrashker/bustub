@@ -54,7 +54,7 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
   std::vector<frame_id_t> inf_back_ids;
   std::vector<frame_id_t> n_inf_back_ids;
 
-  std::lock_guard<std::mutex> lk(this->latch_);
+  std::lock_guard<std::recursive_mutex> lk(this->latch_);
 
   for (auto node_it = this->node_store_.begin(); node_it != this->node_store_.end(); node_it++) {
     auto node = node_it->second;
@@ -107,7 +107,7 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id, AccessType access_type) {
   auto now = std::chrono::system_clock::now();
   size_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
 
-  std::lock_guard<std::mutex> lk(this->latch_);
+  std::lock_guard<std::recursive_mutex> lk(this->latch_);
   if (this->node_store_.find(frame_id) == this->node_store_.end()) {
     // First time we are seeing this frame_id
     this->node_store_.insert(std::pair(frame_id, LRUKNode(this->k_, frame_id)));
@@ -116,7 +116,7 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id, AccessType access_type) {
 }
 
 void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
-    std::lock_guard<std::mutex> lk(this->latch_);
+  std::lock_guard<std::recursive_mutex> lk(this->latch_);
   auto frame_it = this->node_store_.find(frame_id);
   BUSTUB_ASSERT(frame_it != this->node_store_.end(), "Evicting Frame which does not Exist");
 
@@ -132,7 +132,7 @@ void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
 }
 
 void LRUKReplacer::Remove(frame_id_t frame_id) {
-    //std::lock_guard<std::mutex> lk(this->latch_);
+  std::lock_guard<std::recursive_mutex> lk(this->latch_);
   auto frame_it = this->node_store_.find(frame_id);
   BUSTUB_ASSERT(frame_it != this->node_store_.end(), "Removing Invalid Frame");
   auto frame = frame_it->second;
@@ -143,8 +143,8 @@ void LRUKReplacer::Remove(frame_id_t frame_id) {
 }
 
 auto LRUKReplacer::Size() -> size_t {
-    std::lock_guard<std::mutex> lk(this->latch_);
-    return this->curr_size_;
+  std::lock_guard<std::recursive_mutex> lk(this->latch_);
+  return this->curr_size_;
 }
 
 }  // namespace bustub

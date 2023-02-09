@@ -84,7 +84,7 @@ auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
 }
 
 auto BufferPoolManager::FetchPage(page_id_t page_id, AccessType access_type) -> Page * {
-    std::lock_guard<std::mutex> lk(this->latch_);
+  std::lock_guard<std::mutex> lk(this->latch_);
   auto frame_it = this->page_table_.find(page_id);
   if (frame_it != this->page_table_.end()) {
     // Page is currently in Buffer Pool
@@ -107,7 +107,7 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, AccessType access_type) -> 
 }
 
 auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unused]] AccessType access_type) -> bool {
-    std::lock_guard<std::mutex> lk(this->latch_);
+  std::lock_guard<std::mutex> lk(this->latch_);
   auto page_it = this->page_table_.find(page_id);
   if (page_it == this->page_table_.end()) {
     return false;
@@ -131,7 +131,7 @@ auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unus
 }
 
 auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
-    std::lock_guard<std::mutex> lk(this->latch_);
+  std::lock_guard<std::mutex> lk(this->latch_);
   auto page_it = this->page_table_.find(page_id);
   if (page_it == this->page_table_.end()) {
     return false;
@@ -152,7 +152,7 @@ void BufferPoolManager::FlushAllPages() {
 }
 
 auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
-    std::lock_guard<std::mutex> lk(this->latch_);
+  std::lock_guard<std::mutex> lk(this->latch_);
   auto page_it = this->page_table_.find(page_id);
   if (page_it == this->page_table_.end()) {
     return false;
