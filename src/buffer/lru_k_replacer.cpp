@@ -91,8 +91,7 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
   }
   if (!n_inf_back_ids.empty()) {
     // Evict the node with the largest backwards k-dist
-    auto now = std::chrono::system_clock::now();
-    size_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
+    auto timestamp = this->current_timestamp_;
     auto evict_id = n_inf_back_ids[0];
     auto largest_k_dist = this->node_store_.find(n_inf_back_ids[0])->second.GetBackwardKDist(timestamp);
     for (size_t i = 1; i < n_inf_back_ids.size(); i++) {
@@ -111,8 +110,7 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
 
 void LRUKReplacer::RecordAccess(frame_id_t frame_id, AccessType access_type) {
   std::lock_guard<std::mutex> lk(this->latch_);
-  auto now = std::chrono::system_clock::now();
-  size_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
+  auto timestamp = this->current_timestamp_++;
 
   BUSTUB_ASSERT(this->node_store_.find(frame_id) != this->node_store_.end(),
                 "Trying to Record Access to Invalid Frame");
