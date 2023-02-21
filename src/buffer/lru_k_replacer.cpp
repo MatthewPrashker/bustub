@@ -48,11 +48,7 @@ void LRUKNode::InsertHistoryTimestamp(size_t current_timestamp) {
 
 void LRUKNode::ClearHistory() { this->history_.clear(); }
 
-LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_frames), k_(k) {
-  for (size_t fid = 1; fid <= num_frames; fid++) {
-    this->node_store_.insert({fid, LRUKNode(k, fid)});
-  }
-}
+LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_frames), k_(k) {}
 
 LRUKReplacer::~LRUKReplacer() = default;
 
@@ -114,8 +110,9 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id, AccessType access_type) {
   size_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
 
   std::lock_guard<std::recursive_mutex> lk(this->latch_);
-  BUSTUB_ASSERT(this->node_store_.find(frame_id) != this->node_store_.end(),
-                "Recording Access to Frame which does not Exist.");
+  if (this->node_store_.find(frame_id) == this->node_store_.end()) {
+    this->node_store_.insert({frame_id, LRUKNode(this->k_, frame_id)});
+  }
   this->node_store_.find(frame_id)->second.InsertHistoryTimestamp(timestamp);
 }
 
