@@ -25,7 +25,7 @@ auto LRUKNode::GetFid() -> frame_id_t { return this->fid_; }
 
 auto LRUKNode::GetBackwardKDist(size_t current_timestamp) -> size_t {
   if (this->HasInfBackwardKDist()) {
-    return SIZE_T_MAX;
+    return INT64_MAX;
   }
   return current_timestamp - this->history_.front();
 }
