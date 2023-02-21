@@ -46,7 +46,13 @@ void LRUKNode::InsertHistoryTimestamp(size_t current_timestamp) {
   }
 }
 
-LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_frames), k_(k) {}
+void LRUKNode::ClearHistory() { this->history_.clear(); }
+
+LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_frames), k_(k) {
+  for (size_t fid = 1; fid <= num_frames; fid++) {
+    this->node_store_.insert({fid, LRUKNode(k, fid)});
+  }
+}
 
 LRUKReplacer::~LRUKReplacer() = default;
 
@@ -108,10 +114,8 @@ void LRUKReplacer::RecordAccess(frame_id_t frame_id, AccessType access_type) {
   size_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
 
   std::lock_guard<std::recursive_mutex> lk(this->latch_);
-  if (this->node_store_.find(frame_id) == this->node_store_.end()) {
-    // First time we are seeing this frame_id
-    this->node_store_.insert(std::pair(frame_id, LRUKNode(this->k_, frame_id)));
-  }
+  BUSTUB_ASSERT(this->node_store_.find(frame_id) != this->node_store_.end(),
+                "Recording Access to Frame which does not Exist.");
   this->node_store_.find(frame_id)->second.InsertHistoryTimestamp(timestamp);
 }
 
@@ -135,11 +139,10 @@ void LRUKReplacer::Remove(frame_id_t frame_id) {
   std::lock_guard<std::recursive_mutex> lk(this->latch_);
   auto frame_it = this->node_store_.find(frame_id);
   BUSTUB_ASSERT(frame_it != this->node_store_.end(), "Removing Invalid Frame");
-  auto frame = frame_it->second;
-  BUSTUB_ASSERT(frame.IsEvictable(), "Removing Non-Evictable Frame");
+  BUSTUB_ASSERT(frame_it->second.IsEvictable(), "Removing Non-Evictable Frame");
 
-  this->node_store_.erase(frame_it);
-  this->curr_size_ -= 1;
+  frame_it->second.ClearHistory();
+  this->SetEvictable(frame_id, false);
 }
 
 auto LRUKReplacer::Size() -> size_t {

@@ -36,6 +36,7 @@ class LRUKNode {
   auto HasInfBackwardKDist() -> bool;
   auto GetEarliestTimestamp() -> size_t;
   void InsertHistoryTimestamp(size_t current_timestamp);
+  void ClearHistory();
 
  private:
   /** History of last seen K timestamps of this page. Least recent timestamp stored in front. */
