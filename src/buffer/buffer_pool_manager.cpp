@@ -35,17 +35,13 @@ BufferPoolManager::~BufferPoolManager() { delete[] pages_; }
 
 // Only call while holding latch
 auto BufferPoolManager::GetFreeFrame(frame_id_t *frame_id) -> bool {
-  if (this->free_list_.size() > 0) {
+  if (!this->free_list_.empty()) {
     *frame_id = this->free_list_.front();
     this->free_list_.pop_front();
     return true;
-  } else {
-    // Try to evict a page
-    if (this->replacer_->Evict(frame_id)) {
-      return true;
-    }
   }
-  return false;
+  // Try to evict a page
+  return this->replacer_->Evict(frame_id);
 }
 
 // Only call while holding latch
@@ -145,8 +141,8 @@ auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
 }
 
 void BufferPoolManager::FlushAllPages() {
-  for (auto page_it = this->page_table_.begin(); page_it != this->page_table_.end(); page_it++) {
-    auto page_id = page_it->first;
+  for (auto &page_it : this->page_table_) {
+    auto page_id = page_it.first;
     this->FlushPage(page_id);
   }
 }

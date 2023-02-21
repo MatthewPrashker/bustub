@@ -33,7 +33,7 @@ auto LRUKNode::GetBackwardKDist(size_t current_timestamp) -> size_t {
 auto LRUKNode::HasInfBackwardKDist() -> bool { return this->history_.size() < this->k_; }
 
 auto LRUKNode::GetEarliestTimestamp() -> size_t {
-  if (this->history_.size() == 0) {
+  if (this->history_.empty()) {
     return 0;
   }
   return this->history_.front();
@@ -48,7 +48,7 @@ void LRUKNode::InsertHistoryTimestamp(size_t current_timestamp) {
 
 LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_frames), k_(k) {}
 
-LRUKReplacer::~LRUKReplacer() {}
+LRUKReplacer::~LRUKReplacer() = default;
 
 auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
   std::vector<frame_id_t> inf_back_ids;
@@ -56,18 +56,18 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
 
   std::lock_guard<std::recursive_mutex> lk(this->latch_);
 
-  for (auto node_it = this->node_store_.begin(); node_it != this->node_store_.end(); node_it++) {
-    auto node = node_it->second;
+  for (auto &node_it : this->node_store_) {
+    auto node = node_it.second;
     if (!node.IsEvictable()) {
       continue;
     }
     if (node.HasInfBackwardKDist()) {
-      inf_back_ids.push_back(node_it->first);
+      inf_back_ids.push_back(node_it.first);
     } else {
-      n_inf_back_ids.push_back(node_it->first);
+      n_inf_back_ids.push_back(node_it.first);
     }
   }
-  if (inf_back_ids.size() > 0) {
+  if (!inf_back_ids.empty()) {
     // There is at least one node with infinite backwards k-distance,
     // So among these nodes, we look at the one with the earliest time-stamp
     auto evict_id = inf_back_ids[0];
@@ -82,7 +82,8 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
     *frame_id = evict_id;
     this->Remove(evict_id);
     return true;
-  } else if (n_inf_back_ids.size() > 0) {
+  }
+  if (!n_inf_back_ids.empty()) {
     // Evict the node with the largest backwards k-dist
     auto now = std::chrono::system_clock::now();
     size_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
@@ -98,9 +99,8 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
     *frame_id = evict_id;
     this->Remove(evict_id);
     return true;
-  } else {
-    return false;
   }
+  return false;
 }
 
 void LRUKReplacer::RecordAccess(frame_id_t frame_id, AccessType access_type) {

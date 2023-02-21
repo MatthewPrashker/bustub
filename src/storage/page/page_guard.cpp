@@ -4,8 +4,8 @@
 namespace bustub {
 
 BasicPageGuard::BasicPageGuard(BasicPageGuard &&that) noexcept {
-  this->bpm_ = std::move(that.bpm_);
-  this->page_ = std::move(that.page_);
+  this->bpm_ = that.bpm_;
+  this->page_ = that.page_;
   this->is_dirty_ = that.is_dirty_;
 
   that.bpm_ = nullptr;
