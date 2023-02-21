@@ -48,15 +48,19 @@ void LRUKNode::InsertHistoryTimestamp(size_t current_timestamp) {
 
 void LRUKNode::ClearHistory() { this->history_.clear(); }
 
-LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_frames), k_(k) {}
+LRUKReplacer::LRUKReplacer(size_t num_frames, size_t k) : replacer_size_(num_frames), k_(k) {
+  std::lock_guard<std::mutex> lk(this->latch_);
+  for (size_t fid = 0; fid < num_frames; fid++) {
+    this->node_store_.insert({fid, LRUKNode(k, fid)});
+  }
+}
 
 LRUKReplacer::~LRUKReplacer() = default;
 
 auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
+  std::lock_guard<std::mutex> lk(this->latch_);
   std::vector<frame_id_t> inf_back_ids;
   std::vector<frame_id_t> n_inf_back_ids;
-
-  std::lock_guard<std::recursive_mutex> lk(this->latch_);
 
   for (auto &node_it : this->node_store_) {
     auto node = node_it.second;
@@ -64,9 +68,9 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
       continue;
     }
     if (node.HasInfBackwardKDist()) {
-      inf_back_ids.push_back(node_it.first);
+      inf_back_ids.push_back(node.GetFid());
     } else {
-      n_inf_back_ids.push_back(node_it.first);
+      n_inf_back_ids.push_back(node.GetFid());
     }
   }
   if (!inf_back_ids.empty()) {
@@ -82,7 +86,7 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
       }
     }
     *frame_id = evict_id;
-    this->Remove(evict_id);
+    this->RemoveUnsync(evict_id);
     return true;
   }
   if (!n_inf_back_ids.empty()) {
@@ -99,25 +103,28 @@ auto LRUKReplacer::Evict(frame_id_t *frame_id) -> bool {
       }
     }
     *frame_id = evict_id;
-    this->Remove(evict_id);
+    this->RemoveUnsync(evict_id);
     return true;
   }
   return false;
 }
 
 void LRUKReplacer::RecordAccess(frame_id_t frame_id, AccessType access_type) {
+  std::lock_guard<std::mutex> lk(this->latch_);
   auto now = std::chrono::system_clock::now();
   size_t timestamp = std::chrono::duration_cast<std::chrono::microseconds>(now.time_since_epoch()).count();
 
-  std::lock_guard<std::recursive_mutex> lk(this->latch_);
-  if (this->node_store_.find(frame_id) == this->node_store_.end()) {
-    this->node_store_.insert({frame_id, LRUKNode(this->k_, frame_id)});
-  }
+  BUSTUB_ASSERT(this->node_store_.find(frame_id) != this->node_store_.end(),
+                "Trying to Record Access to Invalid Frame");
   this->node_store_.find(frame_id)->second.InsertHistoryTimestamp(timestamp);
 }
 
 void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
-  std::lock_guard<std::recursive_mutex> lk(this->latch_);
+  std::lock_guard<std::mutex> lk(this->latch_);
+  this->SetEvictableUnsync(frame_id, set_evictable);
+}
+
+void LRUKReplacer::SetEvictableUnsync(frame_id_t frame_id, bool set_evictable) {
   auto frame_it = this->node_store_.find(frame_id);
   BUSTUB_ASSERT(frame_it != this->node_store_.end(), "Evicting Frame which does not Exist");
 
@@ -133,17 +140,21 @@ void LRUKReplacer::SetEvictable(frame_id_t frame_id, bool set_evictable) {
 }
 
 void LRUKReplacer::Remove(frame_id_t frame_id) {
-  std::lock_guard<std::recursive_mutex> lk(this->latch_);
+  std::lock_guard<std::mutex> lk(this->latch_);
+  this->RemoveUnsync(frame_id);
+}
+
+void LRUKReplacer::RemoveUnsync(frame_id_t frame_id) {
   auto frame_it = this->node_store_.find(frame_id);
   BUSTUB_ASSERT(frame_it != this->node_store_.end(), "Removing Invalid Frame");
   BUSTUB_ASSERT(frame_it->second.IsEvictable(), "Removing Non-Evictable Frame");
 
   frame_it->second.ClearHistory();
-  this->SetEvictable(frame_id, false);
+  this->SetEvictableUnsync(frame_id, false);
 }
 
 auto LRUKReplacer::Size() -> size_t {
-  std::lock_guard<std::recursive_mutex> lk(this->latch_);
+  std::lock_guard<std::mutex> lk(this->latch_);
   return this->curr_size_;
 }
 

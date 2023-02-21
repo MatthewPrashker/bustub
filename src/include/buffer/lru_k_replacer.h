@@ -160,6 +160,9 @@ class LRUKReplacer {
   auto Size() -> size_t;
 
  private:
+  void SetEvictableUnsync(frame_id_t frame_id, bool set_evictable);
+
+  void RemoveUnsync(frame_id_t frame_id);
   // TODO(student): implement me! You can replace these member variables as you like.
   // Remove maybe_unused if you start using them.
   [[maybe_unused]] std::unordered_map<frame_id_t, LRUKNode> node_store_;
@@ -167,7 +170,7 @@ class LRUKReplacer {
   [[maybe_unused]] size_t curr_size_{0};
   [[maybe_unused]] size_t replacer_size_;
   [[maybe_unused]] size_t k_;
-  [[maybe_unused]] std::recursive_mutex latch_;
+  [[maybe_unused]] std::mutex latch_;
 };
 
 }  // namespace bustub
