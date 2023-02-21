@@ -144,8 +144,9 @@ void LRUKReplacer::Remove(frame_id_t frame_id) {
 
 void LRUKReplacer::RemoveUnsync(frame_id_t frame_id) {
   auto frame_it = this->node_store_.find(frame_id);
-  BUSTUB_ASSERT(frame_it != this->node_store_.end(), "Removing Invalid Frame");
-  BUSTUB_ASSERT(frame_it->second.IsEvictable(), "Removing Non-Evictable Frame");
+  if (frame_it == this->node_store_.end() || !frame_it->second.IsEvictable()) {
+    return;
+  }
 
   frame_it->second.ClearHistory();
   this->SetEvictableUnsync(frame_id, false);
