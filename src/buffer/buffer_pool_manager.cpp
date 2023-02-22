@@ -25,15 +25,17 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager
   pages_ = new Page[pool_size_];
   replacer_ = std::make_unique<LRUKReplacer>(pool_size, replacer_k);
 
-  // Initially, every page is in the free list.
-  for (size_t i = 0; i < pool_size_; ++i) {
-    free_list_.emplace_back(static_cast<int>(i));
+  // Initially, every frame is in the free list.
+  for (frame_id_t fid = 0; static_cast<size_t>(fid) < pool_size_; ++fid) {
+    free_list_.emplace_back(fid);
   }
 }
 
 BufferPoolManager::~BufferPoolManager() { delete[] pages_; }
 
 // Only call while holding latch
+// Attempts to find any free-frame by first looking in the free list
+// and then trying to find a frame from which we can evict
 auto BufferPoolManager::GetFreeFrame(frame_id_t *frame_id) -> bool {
   if (!this->free_list_.empty()) {
     *frame_id = this->free_list_.front();
