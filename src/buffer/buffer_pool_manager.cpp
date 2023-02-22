@@ -32,8 +32,8 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager
 }
 
 BufferPoolManager::~BufferPoolManager() {
-    this->FlushAllPages();
-    delete[] pages_;
+  this->FlushAllPages();
+  delete[] pages_;
 }
 
 // Only call while holding latch
@@ -65,6 +65,7 @@ void BufferPoolManager::ReplaceFrame(frame_id_t frame_id, page_id_t n_page_id) {
   e_page->page_id_ = n_page_id;
   e_page->pin_count_ = 1;
 
+  this->replacer_->ResetFrameHistory(frame_id);
   this->replacer_->RecordAccess(frame_id);
   this->replacer_->SetEvictable(frame_id, false);
   this->page_table_[n_page_id] = frame_id;

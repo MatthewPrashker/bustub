@@ -152,6 +152,13 @@ void LRUKReplacer::RemoveUnsync(frame_id_t frame_id) {
   this->SetEvictableUnsync(frame_id, false);
 }
 
+void LRUKReplacer::ResetFrameHistory(frame_id_t frame_id) {
+  auto frame_it = this->node_store_.find(frame_id);
+  if (frame_it != this->node_store_.end()) {
+    frame_it->second.ClearHistory();
+  }
+}
+
 auto LRUKReplacer::Size() -> size_t {
   std::lock_guard<std::mutex> lk(this->latch_);
   return this->curr_size_;

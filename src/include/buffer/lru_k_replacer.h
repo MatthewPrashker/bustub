@@ -150,6 +150,8 @@ class LRUKReplacer {
    */
   void Remove(frame_id_t frame_id);
 
+  void ResetFrameHistory(frame_id_t frame_id);
+
   /**
    * TODO(P1): Add implementation
    *
