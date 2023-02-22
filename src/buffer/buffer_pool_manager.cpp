@@ -64,6 +64,7 @@ void BufferPoolManager::ReplaceFrame(frame_id_t frame_id, page_id_t n_page_id) {
   e_page->ResetMemory();
   e_page->page_id_ = n_page_id;
   e_page->pin_count_ = 1;
+  e_page->is_dirty_ = false;
 
   this->replacer_->ResetFrameHistory(frame_id);
   this->replacer_->RecordAccess(frame_id);
@@ -82,6 +83,7 @@ auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
   this->ReplaceFrame(n_frame, n_page_id);
 
   *page_id = n_page_id;
+  std::cout << "New page " << n_page_id << " in frame " << n_frame << "\n";
   return &this->pages_[n_frame];
 }
 
@@ -112,17 +114,20 @@ auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unus
   std::lock_guard<std::mutex> lk(this->latch_);
   auto page_it = this->page_table_.find(page_id);
   if (page_it == this->page_table_.end()) {
+    std::cout << "Unpinning page which does not exist " << page_id << "\n";
     return false;
   }
 
   auto frame_index = page_it->second;
   auto page = &this->pages_[frame_index];
   if (page->pin_count_ <= 0) {
-    return false;
+    std::cout << "Unpinning page with pin count <= 0 " << page_id << "\n";
+    return true;
   }
   if (is_dirty) {
     page->is_dirty_ = true;
   }
+  std::cout << "Unpinning page " << page_id << "\n";
 
   --page->pin_count_;
 
