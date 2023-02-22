@@ -31,7 +31,10 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager
   }
 }
 
-BufferPoolManager::~BufferPoolManager() { delete[] pages_; }
+BufferPoolManager::~BufferPoolManager() {
+    this->FlushAllPages();
+    delete[] pages_;
+}
 
 // Only call while holding latch
 // Attempts to find any free-frame by first looking in the free list
@@ -60,6 +63,7 @@ void BufferPoolManager::ReplaceFrame(frame_id_t frame_id, page_id_t n_page_id) {
 
   e_page->ResetMemory();
   e_page->page_id_ = n_page_id;
+  e_page->pin_count_ = 1;
 
   this->replacer_->RecordAccess(frame_id);
   this->replacer_->SetEvictable(frame_id, false);
@@ -112,7 +116,7 @@ auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unus
 
   auto frame_index = page_it->second;
   auto page = &this->pages_[frame_index];
-  if (page->pin_count_ == 0) {
+  if (page->pin_count_ <= 0) {
     return false;
   }
   if (is_dirty) {
