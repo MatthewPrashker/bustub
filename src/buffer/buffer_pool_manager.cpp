@@ -60,7 +60,6 @@ void BufferPoolManager::ReplaceFrame(frame_id_t frame_id, page_id_t n_page_id) {
 
   e_page->ResetMemory();
   e_page->page_id_ = n_page_id;
-  e_page->pin_count_ = 1;
 
   this->replacer_->RecordAccess(frame_id);
   this->replacer_->SetEvictable(frame_id, false);
