@@ -31,10 +31,7 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager
   }
 }
 
-BufferPoolManager::~BufferPoolManager() {
-  this->FlushAllPages();
-  delete[] pages_;
-}
+BufferPoolManager::~BufferPoolManager() { delete[] pages_; }
 
 // Only call while holding latch
 // Attempts to find any free-frame by first looking in the free list
@@ -66,7 +63,7 @@ void BufferPoolManager::ReplaceFrame(frame_id_t frame_id, page_id_t n_page_id) {
   this->replacer_->ResetFrameHistory(frame_id);
   this->replacer_->RecordAccess(frame_id);
   this->replacer_->SetEvictable(frame_id, false);
-  this->page_table_.insert({n_page_id, frame_id});
+  this->page_table_[n_page_id] = frame_id;
 }
 
 auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
@@ -168,7 +165,7 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
   if (page_it == this->page_table_.end()) {
     std::cout << "Tried deleting page " << page_id << " which does not exist"
               << "\n";
-    return false;
+    return true;
   }
 
   auto frame_id = page_it->second;
@@ -178,7 +175,7 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
     return false;
   }
 
-  this->page_table_.erase(page->page_id_);
+  this->page_table_.erase(page_it);
   this->replacer_->Remove(frame_id);
   this->free_list_.push_back(frame_id);
 
