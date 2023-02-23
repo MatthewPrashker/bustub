@@ -56,10 +56,7 @@ void BufferPoolManager::ReplaceFrame(frame_id_t frame_id, page_id_t n_page_id) {
     this->disk_manager_->WritePage(e_page->page_id_, e_page->data_);
   }
 
-  auto e_page_it = this->page_table_.find(e_page->page_id_);
-  if (e_page_it != this->page_table_.end()) {
-    this->page_table_.erase(e_page_it);
-  }
+  this->page_table_.erase(e_page->page_id_);
 
   e_page->ResetMemory();
   e_page->page_id_ = n_page_id;
@@ -69,7 +66,7 @@ void BufferPoolManager::ReplaceFrame(frame_id_t frame_id, page_id_t n_page_id) {
   this->replacer_->ResetFrameHistory(frame_id);
   this->replacer_->RecordAccess(frame_id);
   this->replacer_->SetEvictable(frame_id, false);
-  this->page_table_[n_page_id] = frame_id;
+  this->page_table_.insert({n_page_id, frame_id});
 }
 
 auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
@@ -92,6 +89,11 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, AccessType access_type) -> 
   auto frame_it = this->page_table_.find(page_id);
   if (frame_it != this->page_table_.end()) {
     // Page is currently in Buffer Pool
+    std::cout << "Fetching page " << page_id << " which is already in memory\n";
+    this->pages_[frame_it->second].pin_count_++;
+    if (this->pages_[frame_it->second].pin_count_ > 0) {
+      this->replacer_->SetEvictable(frame_it->second, false);
+    }
     return &this->pages_[frame_it->second];
   }
 
@@ -105,6 +107,8 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, AccessType access_type) -> 
 
   // ... clear the old page in that frame, and read in the new page.
 
+  std::cout << "Fetching page " << page_id << " into frame " << n_frame_id << " which has pin-count "
+            << this->pages_[n_frame_id].pin_count_ << "\n";
   this->ReplaceFrame(n_frame_id, page_id);
   this->disk_manager_->ReadPage(page_id, this->pages_[n_frame_id].data_);
   return &this->pages_[n_frame_id];
@@ -122,14 +126,14 @@ auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unus
   auto page = &this->pages_[frame_index];
   if (page->pin_count_ <= 0) {
     std::cout << "Unpinning page with pin count <= 0 " << page_id << "\n";
-    return true;
+    return false;
   }
   if (is_dirty) {
     page->is_dirty_ = true;
   }
-  std::cout << "Unpinning page " << page_id << "\n";
 
   --page->pin_count_;
+  std::cout << "Unpinning page " << page_id << " new page count: " << page->pin_count_ << "\n";
 
   if (page->pin_count_ == 0) {
     this->replacer_->SetEvictable(frame_index, true);
@@ -162,16 +166,19 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
   std::lock_guard<std::mutex> lk(this->latch_);
   auto page_it = this->page_table_.find(page_id);
   if (page_it == this->page_table_.end()) {
+    std::cout << "Tried deleting page " << page_id << " which does not exist"
+              << "\n";
     return false;
   }
 
   auto frame_id = page_it->second;
   auto page = &this->pages_[frame_id];
   if (page->GetPinCount() > 0) {
+    std::cout << "Tried to delete page " << page_id << " with pin count " << page->GetPinCount() << "\n";
     return false;
   }
 
-  this->page_table_.erase(page_it);
+  this->page_table_.erase(page->page_id_);
   this->replacer_->Remove(frame_id);
   this->free_list_.push_back(frame_id);
 
