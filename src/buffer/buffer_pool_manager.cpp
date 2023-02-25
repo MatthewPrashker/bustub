@@ -196,13 +196,17 @@ auto BufferPoolManager::FetchPageBasic(page_id_t page_id) -> BasicPageGuard {
 
 auto BufferPoolManager::FetchPageRead(page_id_t page_id) -> ReadPageGuard {
   auto page = this->FetchPage(page_id);
-  page->RLatch();
+  if (page != nullptr) {
+    page->RLatch();
+  }
   return ReadPageGuard{this, page};
 }
 
 auto BufferPoolManager::FetchPageWrite(page_id_t page_id) -> WritePageGuard {
   auto page = this->FetchPage(page_id);
-  page->WLatch();
+  if (page != nullptr) {
+    page->WLatch();
+  }
   return WritePageGuard{this, page};
 }
 

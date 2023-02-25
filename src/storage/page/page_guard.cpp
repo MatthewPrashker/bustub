@@ -13,28 +13,30 @@ BasicPageGuard::BasicPageGuard(BasicPageGuard &&that) noexcept {
 }
 
 void BasicPageGuard::Drop() {
-  if (this->bpm_ == nullptr) {
+  if (this->page_ == nullptr) {
     return;
   }
 
   this->bpm_->UnpinPage(this->page_->GetPageId(), this->is_dirty_);
   this->bpm_ = nullptr;
+  this->page_ = nullptr;
 }
 
 auto BasicPageGuard::operator=(BasicPageGuard &&that) noexcept -> BasicPageGuard & {
-  if (this == &that || that.bpm_ == nullptr) {
-    return *this;
-  }
-
-  if (this->page_ == that.page_) {
-    this->is_dirty_ = that.is_dirty_;
+  if (this == &that) {
     return *this;
   }
 
   this->Drop();
   this->bpm_ = that.bpm_;
-  this->page_ = this->bpm_->FetchPage(that.PageId());
+  if (that.page_ != nullptr) {
+    this->page_ = this->bpm_->FetchPage(that.PageId());
+  } else {
+    this->page_ = nullptr;
+  }
   this->is_dirty_ = that.is_dirty_;
+  that.Drop();
+
   return *this;
 }
 
@@ -46,13 +48,18 @@ auto ReadPageGuard::operator=(ReadPageGuard &&that) noexcept -> ReadPageGuard & 
   if (this == &that) {
     return *this;
   }
+  if (this->guard_.page_ != nullptr) {
+    this->guard_.page_->RUnlatch();
+  }
   this->guard_ = std::move(that.guard_);
   return *this;
 }
 
 void ReadPageGuard::Drop() {
+  if (this->guard_.page_ != nullptr) {
+    this->guard_.page_->RUnlatch();
+  }
   this->guard_.Drop();
-  this->guard_.page_->RUnlatch();
 }
 
 ReadPageGuard::~ReadPageGuard() { this->Drop(); }
@@ -65,13 +72,18 @@ auto WritePageGuard::operator=(WritePageGuard &&that) noexcept -> WritePageGuard
   if (this == &that) {
     return *this;
   }
+  if (this->guard_.page_ != nullptr) {
+    this->guard_.page_->WUnlatch();
+  }
   this->guard_ = std::move(that.guard_);
   return *this;
 }
 
 void WritePageGuard::Drop() {
+  if (this->guard_.page_ != nullptr) {
+    this->guard_.page_->WUnlatch();
+  }
   this->guard_.Drop();
-  this->guard_.page_->WUnlatch();
 }
 
 WritePageGuard::~WritePageGuard() { this->Drop(); }
