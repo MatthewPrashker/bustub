@@ -77,7 +77,6 @@ auto BufferPoolManager::NewPage(page_id_t *page_id) -> Page * {
   this->ReplaceFrame(n_frame, n_page_id);
 
   *page_id = n_page_id;
-  std::cout << "New page " << n_page_id << " in frame " << n_frame << "\n";
   return &this->pages_[n_frame];
 }
 
@@ -86,7 +85,6 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, AccessType access_type) -> 
   auto frame_it = this->page_table_.find(page_id);
   if (frame_it != this->page_table_.end()) {
     // Page is currently in Buffer Pool
-    std::cout << "Fetching page " << page_id << " which is already in memory\n";
     this->pages_[frame_it->second].pin_count_++;
     if (this->pages_[frame_it->second].pin_count_ > 0) {
       this->replacer_->SetEvictable(frame_it->second, false);
@@ -104,8 +102,6 @@ auto BufferPoolManager::FetchPage(page_id_t page_id, AccessType access_type) -> 
 
   // ... clear the old page in that frame, and read in the new page.
 
-  std::cout << "Fetching page " << page_id << " into frame " << n_frame_id << " which has pin-count "
-            << this->pages_[n_frame_id].pin_count_ << "\n";
   this->ReplaceFrame(n_frame_id, page_id);
   this->disk_manager_->ReadPage(page_id, this->pages_[n_frame_id].data_);
   return &this->pages_[n_frame_id];
@@ -115,14 +111,12 @@ auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unus
   std::lock_guard<std::mutex> lk(this->latch_);
   auto page_it = this->page_table_.find(page_id);
   if (page_it == this->page_table_.end()) {
-    std::cout << "Unpinning page which does not exist " << page_id << "\n";
     return false;
   }
 
   auto frame_index = page_it->second;
   auto page = &this->pages_[frame_index];
   if (page->pin_count_ <= 0) {
-    std::cout << "Unpinning page with pin count <= 0 " << page_id << "\n";
     return false;
   }
   if (is_dirty) {
@@ -130,7 +124,6 @@ auto BufferPoolManager::UnpinPage(page_id_t page_id, bool is_dirty, [[maybe_unus
   }
 
   --page->pin_count_;
-  std::cout << "Unpinning page " << page_id << " new page count: " << page->pin_count_ << "\n";
 
   if (page->pin_count_ == 0) {
     this->replacer_->SetEvictable(frame_index, true);
@@ -163,15 +156,12 @@ auto BufferPoolManager::DeletePage(page_id_t page_id) -> bool {
   std::lock_guard<std::mutex> lk(this->latch_);
   auto page_it = this->page_table_.find(page_id);
   if (page_it == this->page_table_.end()) {
-    std::cout << "Tried deleting page " << page_id << " which does not exist"
-              << "\n";
     return true;
   }
 
   auto frame_id = page_it->second;
   auto page = &this->pages_[frame_id];
   if (page->GetPinCount() > 0) {
-    std::cout << "Tried to delete page " << page_id << " with pin count " << page->GetPinCount() << "\n";
     return false;
   }
 
