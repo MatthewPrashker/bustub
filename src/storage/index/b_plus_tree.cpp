@@ -18,15 +18,18 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, page_id_t header_page_id, BufferPool
       internal_max_size_(internal_max_size),
       header_page_id_(header_page_id) {
   WritePageGuard guard = bpm_->FetchPageWrite(header_page_id_);
-  auto root_page = guard.AsMut<BPlusTreeHeaderPage>();
-  root_page->root_page_id_ = INVALID_PAGE_ID;
+  auto header_page = guard.AsMut<BPlusTreeHeaderPage>();
+  header_page->root_page_id_ = INVALID_PAGE_ID;
 }
 
 /*
  * Helper function to decide whether current b+tree is empty
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::IsEmpty() const -> bool { return true; }
+auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
+  return reinterpret_cast<const BPlusTreeHeaderPage *>(this->bpm_->FetchPageRead(this->header_page_id_).GetData())
+             ->root_page_id_ == INVALID_PAGE_ID;
+}
 /*****************************************************************************
  * SEARCH
  *****************************************************************************/
@@ -38,6 +41,14 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool { return true; }
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *txn) -> bool {
   // Declaration of context instance.
+  if(this->IsEmpty()) {return false;}
+
+  auto cur_page = reinterpret_cast<const InternalPage *>(this->bpm_->FetchPageRead(this->GetRootPageId()).GetData());
+  while(!cur_page->IsLeafPage()) {
+
+  }
+  // binary search for the key within the internal page.
+
   Context ctx;
   (void)ctx;
   return false;
@@ -56,6 +67,15 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *txn) -> bool {
   // Declaration of context instance.
+  if (this->IsEmpty()) {
+    page_id_t root_page_id;
+    auto root = reinterpret_cast<InternalPage *>(this->bpm_->NewPage(&root_page_id)->GetData());
+    root->Init();
+    reinterpret_cast<BPlusTreeHeaderPage *>(this->bpm_->FetchPageWrite(this->header_page_id_).GetDataMut())
+        ->root_page_id_ = root_page_id;
+  }
+  auto root = reinterpret_cast<InternalPage *>(this->bpm_->FetchPageWrite(this->GetRootPageId()).GetDataMut());
+
   Context ctx;
   (void)ctx;
   return false;
@@ -110,7 +130,7 @@ auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE(); 
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetRootPageId() -> page_id_t {
-    return bpm_->FetchPageRead(header_page_id_).As<BPlusTreeHeaderPage>()->root_page_id_;
+  return bpm_->FetchPageRead(header_page_id_).As<BPlusTreeHeaderPage>()->root_page_id_;
 }
 
 /*****************************************************************************
