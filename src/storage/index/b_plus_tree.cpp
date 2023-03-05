@@ -27,8 +27,9 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, page_id_t header_page_id, BufferPool
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
-  return reinterpret_cast<const BPlusTreeHeaderPage *>(this->bpm_->FetchPageRead(this->header_page_id_).GetData())
-             ->root_page_id_ == INVALID_PAGE_ID;
+  ReadPageGuard guard = bpm_->FetchPageRead(header_page_id_);
+  auto header_page = guard.As<BPlusTreeHeaderPage>();
+  return header_page->root_page_id_ == INVALID_PAGE_ID;
 }
 /*****************************************************************************
  * SEARCH
@@ -41,12 +42,14 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *txn) -> bool {
   // Declaration of context instance.
-  if(this->IsEmpty()) {return false;}
-
-  auto cur_page = reinterpret_cast<const InternalPage *>(this->bpm_->FetchPageRead(this->GetRootPageId()).GetData());
-  while(!cur_page->IsLeafPage()) {
-
+  if (this->IsEmpty()) {
+    return false;
   }
+  ReadPageGuard cur_guard = this->bpm_->FetchPageRead(this->GetRootPageId());
+  auto cur_page = cur_guard.As<InternalPage>();
+  while (!cur_page->IsLeafPage()) {
+  }
+
   // binary search for the key within the internal page.
 
   Context ctx;
@@ -57,6 +60,23 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
 /*****************************************************************************
  * INSERTION
  *****************************************************************************/
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::MakeRoot() {
+  BUSTUB_ASSERT(this->IsEmpty(), "Only Make root on empty BTree");
+  page_id_t root_page_id;
+  this->bpm_->NewPage(&root_page_id);
+
+  // set new root id in the header page
+  WritePageGuard header_guard = this->bpm_->FetchPageWrite(this->header_page_id_);
+  auto header_page = header_guard.AsMut<BPlusTreeHeaderPage>();
+  header_page->root_page_id_ = root_page_id;
+
+  // Initialize the root page
+  WritePageGuard guard = this->bpm_->FetchPageWrite(root_page_id);
+  auto root = guard.AsMut<InternalPage>();
+  root->Init();
+}
+
 /*
  * Insert constant key & value pair into b+ tree
  * if current tree is empty, start new tree, update root page id and insert
@@ -66,15 +86,14 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *txn) -> bool {
-  // Declaration of context instance.
   if (this->IsEmpty()) {
-    page_id_t root_page_id;
-    auto root = reinterpret_cast<InternalPage *>(this->bpm_->NewPage(&root_page_id)->GetData());
-    root->Init();
-    reinterpret_cast<BPlusTreeHeaderPage *>(this->bpm_->FetchPageWrite(this->header_page_id_).GetDataMut())
-        ->root_page_id_ = root_page_id;
+    this->MakeRoot();
   }
-  auto root = reinterpret_cast<InternalPage *>(this->bpm_->FetchPageWrite(this->GetRootPageId()).GetDataMut());
+  // Iterate from the root until we find a non-leaf node.
+  WritePageGuard cur_guard = this->bpm_->FetchPageWrite(this->GetRootPageId());
+  auto cur_page = cur_guard.AsMut<InternalPage>();
+  while (!cur_page->IsLeafPage()) {
+  }
 
   Context ctx;
   (void)ctx;

@@ -40,6 +40,8 @@ class BPlusTreeInternalPage : public BPlusTreePage {
   BPlusTreeInternalPage() = delete;
   BPlusTreeInternalPage(const BPlusTreeInternalPage &other) = delete;
 
+  auto IndexInRange(int index) const -> bool;
+
   /**
    * Writes the necessary header information to a newly created page, must be called after
    * the creation of a new page to make a valid BPlusTreeInternalPage

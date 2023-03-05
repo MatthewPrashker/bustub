@@ -29,26 +29,45 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::Init(int max_size) {
   this->SetSize(0);
   this->SetMaxSize(max_size);
 }
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::IndexInRange(int index) const -> bool {
+  return !(index <= 0 || index > this->GetSize());
+}
 /*
  * Helper method to get/set the key associated with input "index"(a.k.a
  * array offset)
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::KeyAt(int index) const -> KeyType {
-  // replace with your own code
-  KeyType key{};
-  return key;
+  if (!this->IndexInRange(index)) {
+    return KeyType{};
+  }
+  MappingType kv = *(this->array_ + index);
+  return kv.first;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {}
+void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
+  if (!this->IndexInRange(index)) {
+    return;
+  }
+  MappingType *kv = this->array_ + index;
+  kv->first = key;
+}
 
 /*
  * Helper method to get the value associated with input "index"(a.k.a array
  * offset)
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType { return 0; }
+auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::ValueAt(int index) const -> ValueType {
+  if (!this->IndexInRange(index)) {
+    return ValueType{};
+  }
+  MappingType kv = *(this->array_ + index);
+  return kv.second;
+}
 
 // valuetype for internalNode should be page id_t
 template class BPlusTreeInternalPage<GenericKey<4>, page_id_t, GenericComparator<4>>;

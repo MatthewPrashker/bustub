@@ -54,6 +54,8 @@ class BPlusTreeLeafPage : public BPlusTreePage {
    */
   void Init(int max_size = LEAF_PAGE_SIZE);
 
+  auto IndexInRange(int index) -> bool;
+
   // helper methods
   auto GetNextPageId() const -> page_id_t;
   void SetNextPageId(page_id_t next_page_id);
