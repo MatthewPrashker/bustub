@@ -34,6 +34,34 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
 /*****************************************************************************
  * SEARCH
  *****************************************************************************/
+
+// TODO(mprashker): Replace with binary search
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::GetChildIndex(const InternalPage *page, const KeyType &key) const -> page_id_t {
+  for (int i = 1; i + 1 < page->GetSize(); i++) {
+    auto l_key = page->KeyAt(i);
+    auto r_key = page->KeyAt(i + 1);
+    if (this->comparator_(l_key, key) <= 0 && this->comparator_(key, r_key) < 0) {
+      return page->ValueAt(i);
+    }
+  }
+  return page->ValueAt(page->GetSize());
+}
+
+// TODO(mprashker): Replace with binary search
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::FindValueInLeaf(const LeafPage *page, const KeyType &key, std::vector<ValueType> *result) const
+    -> bool {
+  bool found = false;
+  for (int i = 0; i < page->GetSize(); i++) {
+    if (this->comparator_(page->KeyAt(i), key) == 0) {
+      found = true;
+      result->push_back(page->ValueAt(i));
+    }
+  }
+  return found;
+}
+
 /*
  * Return the only value that associated with input key
  * This method is used for point query
@@ -41,20 +69,22 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *txn) -> bool {
-  // Declaration of context instance.
   if (this->IsEmpty()) {
     return false;
   }
   ReadPageGuard cur_guard = this->bpm_->FetchPageRead(this->GetRootPageId());
-  auto cur_page = cur_guard.As<InternalPage>();
+  auto cur_page = cur_guard.As<BPlusTreePage>();
   while (!cur_page->IsLeafPage()) {
+    auto internal_page = reinterpret_cast<const InternalPage *>(cur_page);
+    auto child_pid = this->GetChildIndex(internal_page, key);
+
+    // Update cur to child
+    cur_guard = this->bpm_->FetchPageRead(child_pid);
+    cur_page = cur_guard.As<BPlusTreePage>();
   }
 
-  // binary search for the key within the internal page.
-
-  Context ctx;
-  (void)ctx;
-  return false;
+  auto leaf_page = reinterpret_cast<const LeafPage *>(cur_page);
+  return this->FindValueInLeaf(leaf_page, key, result);
 }
 
 /*****************************************************************************
@@ -73,8 +103,16 @@ void BPLUSTREE_TYPE::MakeRoot() {
 
   // Initialize the root page
   WritePageGuard guard = this->bpm_->FetchPageWrite(root_page_id);
-  auto root = guard.AsMut<InternalPage>();
+  auto root = guard.AsMut<LeafPage>();
   root->Init();
+}
+
+// TODO(mprashker): Replace with binary search
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::InsertValueInLeaf(LeafPage *page, const KeyType &key, const ValueType &val, Transaction *txn)
+    -> bool {
+    page->IncreaseSize(1);
+  return true;
 }
 
 /*
@@ -91,13 +129,18 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   }
   // Iterate from the root until we find a non-leaf node.
   WritePageGuard cur_guard = this->bpm_->FetchPageWrite(this->GetRootPageId());
-  auto cur_page = cur_guard.AsMut<InternalPage>();
+  auto cur_page = cur_guard.AsMut<BPlusTreePage>();
   while (!cur_page->IsLeafPage()) {
+    auto internal_page = reinterpret_cast<const InternalPage *>(cur_page);
+    auto child_pid = this->GetChildIndex(internal_page, key);
+
+    // Update cur to child
+    cur_guard = this->bpm_->FetchPageWrite(child_pid);
+    cur_page = cur_guard.AsMut<BPlusTreePage>();
   }
 
-  Context ctx;
-  (void)ctx;
-  return false;
+  auto *leaf_page = cur_guard.AsMut<LeafPage>();
+  return this->InsertValueInLeaf(leaf_page, key, value, txn);
 }
 
 /*****************************************************************************
@@ -149,7 +192,9 @@ auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE(); 
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetRootPageId() -> page_id_t {
-  return bpm_->FetchPageRead(header_page_id_).As<BPlusTreeHeaderPage>()->root_page_id_;
+    ReadPageGuard guard = this->bpm_->FetchPageRead(header_page_id_);
+    auto header_page = guard.As<BPlusTreeHeaderPage>();
+    return header_page->root_page_id_;
 }
 
 /*****************************************************************************

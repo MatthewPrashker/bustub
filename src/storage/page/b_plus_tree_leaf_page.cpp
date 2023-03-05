@@ -38,7 +38,9 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::Init(int max_size) {
  */
 
 INDEX_TEMPLATE_ARGUMENTS
-auto B_PLUS_TREE_LEAF_PAGE_TYPE::IndexInRange(int index) -> bool { return !(index < 0 || index > this->GetSize()); }
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::IndexInRange(int index) const -> bool {
+  return !(index < 0 || index > this->GetSize());
+}
 
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetNextPageId() const -> page_id_t { return this->next_page_id_; }
@@ -52,9 +54,18 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::SetNextPageId(page_id_t next_page_id) { this->n
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_LEAF_PAGE_TYPE::KeyAt(int index) const -> KeyType {
-  // replace with your own code
-  KeyType key{};
-  return key;
+  if (!this->IndexInRange(index)) {
+    return KeyType{};
+  }
+  return (this->array_ + index)->first;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::ValueAt(int index) const -> ValueType {
+  if (!this->IndexInRange(index)) {
+    return ValueType{};
+  }
+  return (this->array_ + index)->second;
 }
 
 template class BPlusTreeLeafPage<GenericKey<4>, RID, GenericComparator<4>>;

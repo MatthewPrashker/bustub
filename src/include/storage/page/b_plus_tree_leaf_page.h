@@ -54,13 +54,13 @@ class BPlusTreeLeafPage : public BPlusTreePage {
    */
   void Init(int max_size = LEAF_PAGE_SIZE);
 
-  auto IndexInRange(int index) -> bool;
+  auto IndexInRange(int index) const -> bool;
 
   // helper methods
   auto GetNextPageId() const -> page_id_t;
   void SetNextPageId(page_id_t next_page_id);
   auto KeyAt(int index) const -> KeyType;
-
+  auto ValueAt(int index) const -> ValueType;
   /**
    * @brief for test only return a string representing all keys in
    * this leaf page formatted as "(key1,key2,key3,...)"

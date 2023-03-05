@@ -34,6 +34,7 @@ INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::IndexInRange(int index) const -> bool {
   return !(index <= 0 || index > this->GetSize());
 }
+
 /*
  * Helper method to get/set the key associated with input "index"(a.k.a
  * array offset)

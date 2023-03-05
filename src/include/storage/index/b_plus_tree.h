@@ -71,6 +71,12 @@ class BPlusTree {
 
   void MakeRoot();
 
+  auto GetChildIndex(const InternalPage *page, const KeyType &key) const -> page_id_t;
+
+  auto InsertValueInLeaf(LeafPage *page, const KeyType &key, const ValueType &val, Transaction *txn) -> bool;
+
+  auto FindValueInLeaf(const LeafPage *page, const KeyType &key, std::vector<ValueType> *result) const -> bool;
+
   // Returns true if this B+ tree has no keys and values.
   auto IsEmpty() const -> bool;
 
