@@ -111,7 +111,23 @@ void BPLUSTREE_TYPE::MakeRoot() {
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::InsertValueInLeaf(LeafPage *page, const KeyType &key, const ValueType &val, Transaction *txn)
     -> bool {
-    page->IncreaseSize(1);
+  int insert_index = 0;
+  while (insert_index < page->GetSize() && this->comparator_(page->KeyAt(insert_index), key) < 0) {
+    insert_index++;
+  }
+  if (this->comparator_(page->KeyAt(insert_index), key) == 0) {
+    // key already exists
+    return false;
+  }
+  std::vector<MappingType> tmp;
+  for (int i = insert_index; i < page->GetSize(); i++) {
+    tmp.emplace_back(page->KeyAt(i), page->ValueAt(i));
+  }
+  page->SetKeyAndValueAt(insert_index, key, val);
+  for (auto kv : tmp) {
+    page->SetKeyAndValueAt(++insert_index, kv.first, kv.second);
+  }
+  page->IncreaseSize(1);
   return true;
 }
 
@@ -192,9 +208,9 @@ auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE(); 
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetRootPageId() -> page_id_t {
-    ReadPageGuard guard = this->bpm_->FetchPageRead(header_page_id_);
-    auto header_page = guard.As<BPlusTreeHeaderPage>();
-    return header_page->root_page_id_;
+  ReadPageGuard guard = this->bpm_->FetchPageRead(header_page_id_);
+  auto header_page = guard.As<BPlusTreeHeaderPage>();
+  return header_page->root_page_id_;
 }
 
 /*****************************************************************************
