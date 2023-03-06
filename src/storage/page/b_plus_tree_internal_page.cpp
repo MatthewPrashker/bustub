@@ -59,17 +59,17 @@ void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetValueAt(int index, const ValueType &value) {
-    if(!this->IndexInRange(index)) {
-        return;
-    }
-    MappingType *kv = this->array_ + index;
-    kv->second = value;
+  if (!this->IndexInRange(index)) {
+    return;
+  }
+  MappingType *kv = this->array_ + index;
+  kv->second = value;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_INTERNAL_PAGE_TYPE::SetKeyAndValueAt(int index, const KeyType &key, const ValueType &value) {
-    this->SetKeyAt(index, key);
-    this->SetValueAt(index, value);
+  this->SetKeyAt(index, key);
+  this->SetValueAt(index, value);
 }
 
 /*

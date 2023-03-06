@@ -38,6 +38,9 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
 // TODO(mprashker): Replace with binary search
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetChildIndex(const InternalPage *page, const KeyType &key) const -> page_id_t {
+  if (this->comparator_(key, page->KeyAt(1))) {
+    return page->ValueAt(1);
+  }
   for (int i = 1; i + 1 < page->GetSize(); i++) {
     auto l_key = page->KeyAt(i);
     auto r_key = page->KeyAt(i + 1);
@@ -145,7 +148,7 @@ auto BPLUSTREE_TYPE::InsertEntryInInternal(InternalPage *page, const KeyType &ke
   while (insert_index < page->GetSize() && this->comparator_(page->KeyAt(insert_index), key) < 0) {
     insert_index++;
   }
-  if (this->comparator_(page->KeyAt(insert_index), key) == 0) {
+  if (insert_index < page->GetSize() && this->comparator_(page->KeyAt(insert_index), key) == 0) {
     // key already exists
     return false;
   }
@@ -162,7 +165,7 @@ auto BPLUSTREE_TYPE::InsertEntryInInternal(InternalPage *page, const KeyType &ke
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::LeafPageFull(LeafPage *page) const -> bool { return (page->GetSize() == page->GetMaxSize()); }
+auto BPLUSTREE_TYPE::LeafPageFull(LeafPage *page) const -> bool { return (page->GetSize() + 1 == page->GetMaxSize()); }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id) -> page_id_t {
@@ -173,9 +176,11 @@ auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id) ->
   auto new_leaf = guard.AsMut<LeafPage>();
   new_leaf->Init(this->leaf_max_size_);
 
+  BUSTUB_ASSERT(new_leaf->IsLeafPage(), "No leaf not leaf");
+
   // Insert latter half of entries into new_leaf
   auto min_size = old_leaf->GetMinSize();
-  for (int i = 0; i < old_leaf->GetMinSize(); i++) {
+  for (int i = 0; i + min_size <= old_leaf->GetSize(); i++) {
     auto key = old_leaf->KeyAt(i + min_size);
     auto val = old_leaf->ValueAt(i + min_size);
     this->InsertEntryInLeaf(new_leaf, key, val);
@@ -211,27 +216,26 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   // Iterate from the root until we find a non-leaf node.
   WritePageGuard cur_guard = this->bpm_->FetchPageWrite(this->GetRootPageId());
   auto cur_page = cur_guard.AsMut<BPlusTreePage>();
-  page_id_t child_pid = INVALID_PAGE_ID;
+
+  page_id_t cur_pid = this->GetRootPageId();
   while (!cur_page->IsLeafPage()) {
     auto internal_page = reinterpret_cast<const InternalPage *>(cur_page);
-    child_pid = this->GetChildIndex(internal_page, key);
 
     // Update cur to child
-    cur_guard = this->bpm_->FetchPageWrite(child_pid);
+    cur_pid = this->GetChildIndex(internal_page, key);
+    cur_guard = this->bpm_->FetchPageWrite(cur_pid);
     cur_page = cur_guard.AsMut<BPlusTreePage>();
   }
 
   auto *leaf_page = cur_guard.AsMut<LeafPage>();
-  auto leaf_page_id = child_pid;
   // auto leaf_page_id = child_pid;
   if (!this->LeafPageFull(leaf_page)) {
     return this->InsertEntryInLeaf(leaf_page, key, value);
   }
 
-  // leaf page full => split node
-  this->SplitLeafNode(leaf_page, leaf_page_id);
-  // return this->Insert(key, value);
-  return true;
+  cur_guard.Drop();
+  this->SplitLeafNode(leaf_page, cur_pid);
+  return this->Insert(key, value, txn);
 }
 
 /*****************************************************************************
