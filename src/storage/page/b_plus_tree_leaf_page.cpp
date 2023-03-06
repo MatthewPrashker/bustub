@@ -69,10 +69,20 @@ auto B_PLUS_TREE_LEAF_PAGE_TYPE::ValueAt(int index) const -> ValueType {
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) { (this->array_ + index)->first = key; }
+void B_PLUS_TREE_LEAF_PAGE_TYPE::SetKeyAt(int index, const KeyType &key) {
+    if(!this->IndexInRange(index)) {
+        return;
+    }
+    (this->array_ + index)->first = key;
+}
 
 INDEX_TEMPLATE_ARGUMENTS
-void B_PLUS_TREE_LEAF_PAGE_TYPE::SetValueAt(int index, const ValueType &val) { (this->array_ + index)->second = val; }
+void B_PLUS_TREE_LEAF_PAGE_TYPE::SetValueAt(int index, const ValueType &val) {
+    if(!this->IndexInRange(index)) {
+        return;
+    }
+    (this->array_ + index)->second = val;
+}
 
 INDEX_TEMPLATE_ARGUMENTS
 void B_PLUS_TREE_LEAF_PAGE_TYPE::SetKeyAndValueAt(int index, const KeyType &key, const ValueType &val) {

@@ -77,7 +77,9 @@ class BPlusTree {
 
   auto SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id) -> page_id_t;
 
-  auto InsertValueInLeaf(LeafPage *page, const KeyType &key, const ValueType &val) -> bool;
+  auto InsertEntryInLeaf(LeafPage *page, const KeyType &key, const ValueType &val) -> bool;
+
+  auto InsertEntryInInternal(InternalPage *page, const KeyType &key, const page_id_t &value) -> bool;
 
   auto FindValueInLeaf(const LeafPage *page, const KeyType &key, std::vector<ValueType> *result) const -> bool;
 
