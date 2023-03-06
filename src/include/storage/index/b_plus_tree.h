@@ -69,9 +69,13 @@ class BPlusTree {
                      const KeyComparator &comparator, int leaf_max_size = LEAF_PAGE_SIZE,
                      int internal_max_size = INTERNAL_PAGE_SIZE);
 
-  void MakeRoot();
+  auto MakeNewRoot() -> page_id_t;
 
   auto GetChildIndex(const InternalPage *page, const KeyType &key) const -> page_id_t;
+
+  auto LeafPageFull(LeafPage *page) const -> bool;
+
+  auto SplitLeafNode(LeafPage *page) -> page_id_t;
 
   auto InsertValueInLeaf(LeafPage *page, const KeyType &key, const ValueType &val, Transaction *txn) -> bool;
 

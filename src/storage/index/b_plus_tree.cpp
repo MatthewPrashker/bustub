@@ -91,8 +91,7 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
  * INSERTION
  *****************************************************************************/
 INDEX_TEMPLATE_ARGUMENTS
-void BPLUSTREE_TYPE::MakeRoot() {
-  BUSTUB_ASSERT(this->IsEmpty(), "Only Make root on empty BTree");
+auto BPLUSTREE_TYPE::MakeNewRoot() -> page_id_t {
   page_id_t root_page_id;
   this->bpm_->NewPage(&root_page_id);
 
@@ -103,8 +102,11 @@ void BPLUSTREE_TYPE::MakeRoot() {
 
   // Initialize the root page
   WritePageGuard guard = this->bpm_->FetchPageWrite(root_page_id);
+
+  // Root Page is initially created as a leaf node
   auto root = guard.AsMut<LeafPage>();
-  root->Init();
+  root->Init(this->leaf_max_size_);
+  return root_page_id;
 }
 
 // TODO(mprashker): Replace with binary search
@@ -131,6 +133,25 @@ auto BPLUSTREE_TYPE::InsertValueInLeaf(LeafPage *page, const KeyType &key, const
   return true;
 }
 
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::LeafPageFull(LeafPage *page) const -> bool {
+  std::cout << page->GetSize() << " " << page->GetMaxSize() << "\n";
+  return (page->GetSize() == page->GetMaxSize());
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf) -> page_id_t {
+  page_id_t new_leaf;
+  this->bpm_->NewPage(&new_leaf);
+
+  // insert latter half of entries into new_leaf
+
+  // truncate existing entries from the node
+  old_leaf->SetSize(old_leaf->GetMinSize());
+
+  return new_leaf;
+}
+
 /*
  * Insert constant key & value pair into b+ tree
  * if current tree is empty, start new tree, update root page id and insert
@@ -141,7 +162,7 @@ auto BPLUSTREE_TYPE::InsertValueInLeaf(LeafPage *page, const KeyType &key, const
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *txn) -> bool {
   if (this->IsEmpty()) {
-    this->MakeRoot();
+    this->MakeNewRoot();
   }
   // Iterate from the root until we find a non-leaf node.
   WritePageGuard cur_guard = this->bpm_->FetchPageWrite(this->GetRootPageId());
@@ -156,7 +177,14 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   }
 
   auto *leaf_page = cur_guard.AsMut<LeafPage>();
-  return this->InsertValueInLeaf(leaf_page, key, value, txn);
+  if (!this->LeafPageFull(leaf_page)) {
+    return this->InsertValueInLeaf(leaf_page, key, value, txn);
+  }
+
+  // leaf page full => split node
+  page_id_t new_leaf_id = this->SplitLeafNode(leaf_page);
+
+  return true;
 }
 
 /*****************************************************************************
