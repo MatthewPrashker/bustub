@@ -168,7 +168,7 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::LeafPageFull(LeafPage *page) const -> bool { return (page->GetSize() + 1 == page->GetMaxSize()); }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id) -> page_id_t {
+auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Context *ctx) -> page_id_t {
   page_id_t new_leaf_id;
   this->bpm_->NewPage(&new_leaf_id);
 
@@ -194,6 +194,11 @@ auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id) ->
     auto root_page = root.AsMut<InternalPage>();
     this->InsertEntryInInternal(root_page, old_leaf->KeyAt(0), old_leaf_id);
     this->InsertEntryInInternal(root_page, new_leaf->KeyAt(0), new_leaf_id);
+  } else {
+      auto parent_guard = std::move(ctx->write_set_.back());
+      auto parent_page = parent_guard.AsMut<InternalPage>();
+      this->InsertEntryInInternal(parent_page, old_leaf->KeyAt(0), old_leaf_id);
+      this->InsertEntryInInternal(parent_page, new_leaf->KeyAt(0), new_leaf_id);
   }
   return new_leaf_id;
 }
@@ -231,8 +236,10 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     return this->InsertEntryInLeaf(leaf_page, key, value);
   }
 
-  cur_guard.Drop();
-  this->SplitLeafNode(leaf_page, cur_pid);
+    std::cout << "Found leaf page and is full with size " << leaf_page->GetSize() << "\n";
+  Context ctx;
+  ctx.write_set_.push_back(std::move(cur_guard));
+  this->SplitLeafNode(leaf_page, cur_pid, &ctx);
   return this->Insert(key, value, txn);
 }
 

@@ -75,7 +75,7 @@ class BPlusTree {
 
   auto LeafPageFull(LeafPage *page) const -> bool;
 
-  auto SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id) -> page_id_t;
+  auto SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Context *ctx) -> page_id_t;
 
   auto InsertEntryInLeaf(LeafPage *page, const KeyType &key, const ValueType &val) -> bool;
 
