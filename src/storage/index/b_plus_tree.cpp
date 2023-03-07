@@ -142,9 +142,13 @@ auto BPLUSTREE_TYPE::InsertEntryInLeaf(LeafPage *page, const KeyType &key, const
 
 // TODO(mprashker): Replace with binary search
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::InsertEntryInInternal(InternalPage *page, const KeyType &key, const page_id_t &value, bool replace)
-    -> bool {
-  BUSTUB_ASSERT(page->GetSize() < page->GetMaxSize(), "Inserting into Internal Node which is full");
+auto BPLUSTREE_TYPE::InsertEntryInInternal(InternalPage *page, const KeyType &key, const page_id_t &value, Context *ctx,
+                                           bool replace) -> bool {
+  if (page->GetSize() == page->GetMaxSize()) {
+    // split the internal node and then tell caller to retry the insertion by returning false
+
+    return false;
+  }
   int insert_index = 0;
   while (insert_index < page->GetSize() && this->comparator_(page->KeyAt(insert_index), key) < 0) {
     insert_index++;
@@ -172,6 +176,9 @@ auto BPLUSTREE_TYPE::InsertEntryInInternal(InternalPage *page, const KeyType &ke
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::LeafPageFull(LeafPage *page) const -> bool { return (page->GetSize() + 1 == page->GetMaxSize()); }
 
+// Make InternalPageFull
+// Make SplitInternalNode
+
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Context *ctx) -> page_id_t {
   page_id_t new_leaf_id;
@@ -197,15 +204,19 @@ auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Co
     auto new_root_id = this->MakeNewRoot(false);
     WritePageGuard root = this->bpm_->FetchPageWrite(new_root_id);
     auto root_page = root.AsMut<InternalPage>();
-    this->InsertEntryInInternal(root_page, old_leaf->KeyAt(0), old_leaf_id);
-    this->InsertEntryInInternal(root_page, new_leaf->KeyAt(0), new_leaf_id);
+    this->InsertEntryInInternal(root_page, old_leaf->KeyAt(0), old_leaf_id, ctx);
+    this->InsertEntryInInternal(root_page, new_leaf->KeyAt(0), new_leaf_id, ctx);
   } else {
     auto parent_guard = std::move(ctx->write_set_.back());
     ctx->write_set_.pop_back();
     auto parent_page = parent_guard.AsMut<InternalPage>();
 
-    this->InsertEntryInInternal(parent_page, old_leaf->KeyAt(0), old_leaf_id, true);
-    this->InsertEntryInInternal(parent_page, new_leaf->KeyAt(0), new_leaf_id, true);
+    // Insert In Internal may potentially split the node, in which case the insertion
+    // will return false, so we keep retrying (most likely at most 1 time).
+    while (!this->InsertEntryInInternal(parent_page, old_leaf->KeyAt(0), old_leaf_id, ctx, true)) {
+    }
+    while (!this->InsertEntryInInternal(parent_page, new_leaf->KeyAt(0), new_leaf_id, ctx, true)) {
+    }
   }
   return new_leaf_id;
 }

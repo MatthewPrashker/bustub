@@ -17,6 +17,7 @@
 #include <queue>
 #include <shared_mutex>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "common/config.h"
@@ -62,9 +63,7 @@ class Context {
     }
   }
 
-  ~Context() {
-      this->UnlockWriteSet();
-  }
+  ~Context() { this->UnlockWriteSet(); }
 };
 
 #define BPLUSTREE_TYPE BPlusTree<KeyType, ValueType, KeyComparator>
@@ -90,8 +89,8 @@ class BPlusTree {
 
   auto InsertEntryInLeaf(LeafPage *page, const KeyType &key, const ValueType &val) -> bool;
 
-  auto InsertEntryInInternal(InternalPage *page, const KeyType &key, const page_id_t &value, bool replace = false)
-      -> bool;
+  auto InsertEntryInInternal(InternalPage *page, const KeyType &key, const page_id_t &value, Context *ctx,
+                             bool replace = false) -> bool;
 
   auto FindValueInLeaf(const LeafPage *page, const KeyType &key, std::vector<ValueType> *result) const -> bool;
 
