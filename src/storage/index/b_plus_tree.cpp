@@ -39,7 +39,7 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetChildIndex(const InternalPage *page, const KeyType &key) const -> page_id_t {
   if (this->comparator_(key, page->KeyAt(1))) {
-    return page->ValueAt(1);
+    return page->ValueAt(0);
   }
   for (int i = 1; i + 1 < page->GetSize(); i++) {
     auto l_key = page->KeyAt(i);
@@ -144,8 +144,8 @@ auto BPLUSTREE_TYPE::InsertEntryInLeaf(LeafPage *page, const KeyType &key, const
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::InsertEntryInInternal(InternalPage *page, const KeyType &key, const page_id_t &value) -> bool {
   BUSTUB_ASSERT(page->GetSize() < page->GetMaxSize(), "Inserting into Internal Node which is full");
-  int insert_index = 1;
-  while (insert_index < page->GetSize() && this->comparator_(page->KeyAt(insert_index), key) < 0) {
+  int insert_index = 0;
+  while (insert_index < page->GetSize() && this->comparator_(page->KeyAt(insert_index), key) >= 0) {
     insert_index++;
   }
   if (insert_index < page->GetSize() && this->comparator_(page->KeyAt(insert_index), key) == 0) {
@@ -165,7 +165,7 @@ auto BPLUSTREE_TYPE::InsertEntryInInternal(InternalPage *page, const KeyType &ke
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::LeafPageFull(LeafPage *page) const -> bool { return (page->GetSize() + 1 == page->GetMaxSize()); }
+auto BPLUSTREE_TYPE::LeafPageFull(LeafPage *page) const -> bool { return (page->GetSize() == page->GetMaxSize()); }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id) -> page_id_t {
@@ -180,7 +180,7 @@ auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id) ->
 
   // Insert latter half of entries into new_leaf
   auto min_size = old_leaf->GetMinSize();
-  for (int i = 0; i + min_size <= old_leaf->GetSize(); i++) {
+  for (int i = 0; i + min_size < old_leaf->GetSize(); i++) {
     auto key = old_leaf->KeyAt(i + min_size);
     auto val = old_leaf->ValueAt(i + min_size);
     this->InsertEntryInLeaf(new_leaf, key, val);
