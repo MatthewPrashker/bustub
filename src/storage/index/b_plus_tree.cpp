@@ -201,6 +201,7 @@ auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Co
     this->InsertEntryInInternal(root_page, new_leaf->KeyAt(0), new_leaf_id);
   } else {
     auto parent_guard = std::move(ctx->write_set_.back());
+    ctx->write_set_.pop_back();
     auto parent_page = parent_guard.AsMut<InternalPage>();
 
     this->InsertEntryInInternal(parent_page, old_leaf->KeyAt(0), old_leaf_id, true);
@@ -245,6 +246,11 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   }
 
   this->SplitLeafNode(leaf_page, cur_pid, &ctx);
+
+  // Unlock write set before retrying insert on split tree
+  ctx.UnlockWriteSet();
+  cur_guard.Drop();
+
   return this->Insert(key, value, txn);
 }
 
