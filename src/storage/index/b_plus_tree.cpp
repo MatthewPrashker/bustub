@@ -142,7 +142,8 @@ auto BPLUSTREE_TYPE::InsertEntryInLeaf(LeafPage *page, const KeyType &key, const
 
 // TODO(mprashker): Replace with binary search
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::InsertEntryInInternal(InternalPage *page, const KeyType &key, const page_id_t &value) -> bool {
+auto BPLUSTREE_TYPE::InsertEntryInInternal(InternalPage *page, const KeyType &key, const page_id_t &value, bool replace)
+    -> bool {
   BUSTUB_ASSERT(page->GetSize() < page->GetMaxSize(), "Inserting into Internal Node which is full");
   int insert_index = 0;
   while (insert_index < page->GetSize() && this->comparator_(page->KeyAt(insert_index), key) < 0) {
@@ -150,6 +151,10 @@ auto BPLUSTREE_TYPE::InsertEntryInInternal(InternalPage *page, const KeyType &ke
   }
   if (insert_index < page->GetSize() && this->comparator_(page->KeyAt(insert_index), key) == 0) {
     // key already exists
+    if (replace) {
+      page->SetValueAt(insert_index, value);
+      return true;
+    }
     return false;
   }
   std::vector<std::pair<KeyType, page_id_t>> tmp;
@@ -195,10 +200,11 @@ auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Co
     this->InsertEntryInInternal(root_page, old_leaf->KeyAt(0), old_leaf_id);
     this->InsertEntryInInternal(root_page, new_leaf->KeyAt(0), new_leaf_id);
   } else {
-      auto parent_guard = std::move(ctx->write_set_.back());
-      auto parent_page = parent_guard.AsMut<InternalPage>();
-      this->InsertEntryInInternal(parent_page, old_leaf->KeyAt(0), old_leaf_id);
-      this->InsertEntryInInternal(parent_page, new_leaf->KeyAt(0), new_leaf_id);
+    auto parent_guard = std::move(ctx->write_set_.back());
+    auto parent_page = parent_guard.AsMut<InternalPage>();
+
+    this->InsertEntryInInternal(parent_page, old_leaf->KeyAt(0), old_leaf_id, true);
+    this->InsertEntryInInternal(parent_page, new_leaf->KeyAt(0), new_leaf_id, true);
   }
   return new_leaf_id;
 }
@@ -217,11 +223,13 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     this->MakeNewRoot(true);
   }
   // Iterate from the root until we find a non-leaf node.
+  Context ctx;
   WritePageGuard cur_guard = this->bpm_->FetchPageWrite(this->GetRootPageId());
   auto cur_page = cur_guard.AsMut<BPlusTreePage>();
 
   page_id_t cur_pid = this->GetRootPageId();
   while (!cur_page->IsLeafPage()) {
+    ctx.write_set_.push_back(std::move(cur_guard));
     auto internal_page = reinterpret_cast<const InternalPage *>(cur_page);
 
     // Update cur to child
@@ -236,9 +244,6 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     return this->InsertEntryInLeaf(leaf_page, key, value);
   }
 
-    std::cout << "Found leaf page and is full with size " << leaf_page->GetSize() << "\n";
-  Context ctx;
-  ctx.write_set_.push_back(std::move(cur_guard));
   this->SplitLeafNode(leaf_page, cur_pid, &ctx);
   return this->Insert(key, value, txn);
 }

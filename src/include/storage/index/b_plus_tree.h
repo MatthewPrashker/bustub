@@ -79,7 +79,8 @@ class BPlusTree {
 
   auto InsertEntryInLeaf(LeafPage *page, const KeyType &key, const ValueType &val) -> bool;
 
-  auto InsertEntryInInternal(InternalPage *page, const KeyType &key, const page_id_t &value) -> bool;
+  auto InsertEntryInInternal(InternalPage *page, const KeyType &key, const page_id_t &value, bool replace = false)
+      -> bool;
 
   auto FindValueInLeaf(const LeafPage *page, const KeyType &key, std::vector<ValueType> *result) const -> bool;
 
