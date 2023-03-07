@@ -38,7 +38,7 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
 // TODO(mprashker): Replace with binary search
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetChildIndex(const InternalPage *page, const KeyType &key) const -> page_id_t {
-  if (this->comparator_(key, page->KeyAt(1))) {
+  if (this->comparator_(key, page->KeyAt(1)) < 0) {
     return page->ValueAt(0);
   }
   for (int i = 1; i + 1 < page->GetSize(); i++) {
@@ -48,7 +48,7 @@ auto BPLUSTREE_TYPE::GetChildIndex(const InternalPage *page, const KeyType &key)
       return page->ValueAt(i);
     }
   }
-  return page->ValueAt(page->GetSize());
+  return page->ValueAt(page->GetSize() - 1);
 }
 
 // TODO(mprashker): Replace with binary search
@@ -145,7 +145,7 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::InsertEntryInInternal(InternalPage *page, const KeyType &key, const page_id_t &value) -> bool {
   BUSTUB_ASSERT(page->GetSize() < page->GetMaxSize(), "Inserting into Internal Node which is full");
   int insert_index = 0;
-  while (insert_index < page->GetSize() && this->comparator_(page->KeyAt(insert_index), key) >= 0) {
+  while (insert_index < page->GetSize() && this->comparator_(page->KeyAt(insert_index), key) < 0) {
     insert_index++;
   }
   if (insert_index < page->GetSize() && this->comparator_(page->KeyAt(insert_index), key) == 0) {
@@ -165,7 +165,7 @@ auto BPLUSTREE_TYPE::InsertEntryInInternal(InternalPage *page, const KeyType &ke
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::LeafPageFull(LeafPage *page) const -> bool { return (page->GetSize() == page->GetMaxSize()); }
+auto BPLUSTREE_TYPE::LeafPageFull(LeafPage *page) const -> bool { return (page->GetSize() + 1 == page->GetMaxSize()); }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id) -> page_id_t {
@@ -175,8 +175,6 @@ auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id) ->
   WritePageGuard guard = this->bpm_->FetchPageWrite(new_leaf_id);
   auto new_leaf = guard.AsMut<LeafPage>();
   new_leaf->Init(this->leaf_max_size_);
-
-  BUSTUB_ASSERT(new_leaf->IsLeafPage(), "No leaf not leaf");
 
   // Insert latter half of entries into new_leaf
   auto min_size = old_leaf->GetMinSize();

@@ -41,10 +41,6 @@ auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::IndexInRange(int index) const -> bool {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto B_PLUS_TREE_INTERNAL_PAGE_TYPE::KeyAt(int index) const -> KeyType {
-    if(index == 0) {
-        // first key in internal page is not valid
-        return KeyType{};
-    }
   if (!this->IndexInRange(index)) {
     return KeyType{};
   }
