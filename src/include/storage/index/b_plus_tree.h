@@ -83,6 +83,8 @@ class BPlusTree {
 
   auto LeafPageFull(LeafPage *page) const -> bool;
 
+  auto InternalPageFull(InternalPage *page) const -> bool;
+
   auto SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Context *ctx) -> page_id_t;
 
   auto SplitInternalNode(InternalPage *old_internal, page_id_t old_internal_id, Context *ctx) -> page_id_t;
