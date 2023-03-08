@@ -181,7 +181,9 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::LeafPageFull(LeafPage *page) const -> bool { return (page->GetSize() == page->GetMaxSize()); }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::InternalPageFull(InternalPage *page) const -> bool {return (page->GetSize() > page->GetMaxSize());}
+auto BPLUSTREE_TYPE::InternalPageFull(InternalPage *page) const -> bool {
+  return (page->GetSize() > page->GetMaxSize());
+}
 
 // Make InternalPageFull
 // Make SplitInternalNode
@@ -196,20 +198,22 @@ auto BPLUSTREE_TYPE::SplitInternalNode(InternalPage *old_internal, page_id_t old
   auto new_internal = guard.AsMut<InternalPage>();
   new_internal->Init(this->internal_max_size_);
 
-    auto min_size = old_internal->GetMinSize();
-    new_internal->SetValueAt(0, old_internal->ValueAt(min_size));
-    new_internal->IncreaseSize(1);
+  // Insert entries into new internal node
+  auto min_size = old_internal->GetMinSize();
+  new_internal->SetValueAt(0, old_internal->ValueAt(min_size));
+  new_internal->IncreaseSize(1);
   for (int i = 1; i + min_size < old_internal->GetSize(); i++) {
     auto key = old_internal->KeyAt(i + min_size);
     auto val = old_internal->ValueAt(i + min_size);
     this->InsertEntryInInternal(new_internal, new_internal_id, key, val, ctx);
   }
-    auto up_key = old_internal->KeyAt(min_size);
+  auto up_key = old_internal->KeyAt(min_size);
+
+  // Truncate the old internal node
   old_internal->SetSize(old_internal->GetMinSize());
   bool internal_is_root = (this->GetRootPageId() == old_internal_id);
   if (internal_is_root) {
     // Make root as internal node
-    std::cout << "splitting root as internal with " << up_key << "\n";
     auto new_root_id = this->MakeNewRoot(false);
     WritePageGuard root = this->bpm_->FetchPageWrite(new_root_id);
     auto root_page = root.AsMut<InternalPage>();
@@ -223,8 +227,7 @@ auto BPLUSTREE_TYPE::SplitInternalNode(InternalPage *old_internal, page_id_t old
     ctx->write_set_.pop_back();
     auto parent_page = parent_guard.AsMut<InternalPage>();
 
-    std::cout << "Insert in internal parent after split " << new_internal->KeyAt(0) << "\n";
-      new_internal->SetValueAt(0, parent_page->ValueAt(0));
+    new_internal->SetValueAt(0, parent_page->ValueAt(0));
     this->InsertEntryInInternal(parent_page, parent_id, up_key, new_internal_id, ctx, true);
   }
   return new_internal_id;
@@ -265,12 +268,9 @@ auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Co
     auto parent_id = ctx->write_set_.back().second;
     ctx->write_set_.pop_back();
     auto parent_page = parent_guard.AsMut<InternalPage>();
-    BUSTUB_ASSERT(!parent_page->IsLeafPage(), "Parent of leaf is not internal");
     // Insert In Internal may potentially split the node, in which case the insertion
     // will return false, so we keep retrying (most likely at most 1 time).
     // this->InsertEntryInInternal(parent_page, parent_id, old_leaf->KeyAt(0), old_leaf_id, ctx, true);
-    std::cout << new_leaf->ToString() <<"\n";
-    std::cout << "With " << new_leaf->KeyAt(0) << "\n";
     this->InsertEntryInInternal(parent_page, parent_id, new_leaf->KeyAt(0), new_leaf_id, ctx, true);
   }
   return new_leaf_id;
