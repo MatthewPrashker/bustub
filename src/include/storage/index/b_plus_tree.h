@@ -49,7 +49,7 @@ class Context {
   page_id_t root_page_id_{INVALID_PAGE_ID};
 
   // Store the write guards of the pages that you're modifying here.
-  std::deque<WritePageGuard> write_set_;
+  std::deque<std::pair<WritePageGuard, page_id_t>> write_set_;
 
   // You may want to use this when getting value, but not necessary.
   std::deque<ReadPageGuard> read_set_;
@@ -58,12 +58,10 @@ class Context {
 
   void UnlockWriteSet() {
     while (!write_set_.empty()) {
-      auto guard = std::move(write_set_.back());
+      auto guard = std::move(write_set_.back().first);
       write_set_.pop_back();
     }
   }
-
-  ~Context() { this->UnlockWriteSet(); }
 };
 
 #define BPLUSTREE_TYPE BPlusTree<KeyType, ValueType, KeyComparator>
@@ -87,10 +85,13 @@ class BPlusTree {
 
   auto SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Context *ctx) -> page_id_t;
 
-  auto InsertEntryInLeaf(LeafPage *page, const KeyType &key, const ValueType &val) -> bool;
+  auto SplitInternalNode(InternalPage *old_internal, page_id_t old_internal_id, Context *ctx) -> page_id_t;
 
-  auto InsertEntryInInternal(InternalPage *page, const KeyType &key, const page_id_t &value, Context *ctx,
-                             bool replace = false) -> bool;
+  auto InsertEntryInLeaf(LeafPage *page, page_id_t page_id, const KeyType &key, const ValueType &val, Context *ctx)
+      -> bool;
+
+  auto InsertEntryInInternal(InternalPage *page, page_id_t page_id, const KeyType &key, const page_id_t &value,
+                             Context *ctx, bool replace = false) -> bool;
 
   auto FindValueInLeaf(const LeafPage *page, const KeyType &key, std::vector<ValueType> *result) const -> bool;
 
