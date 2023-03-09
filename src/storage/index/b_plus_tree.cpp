@@ -194,7 +194,6 @@ auto BPLUSTREE_TYPE::SplitInternalNode(InternalPage *old_internal, page_id_t old
     -> page_id_t {
   page_id_t new_internal_id;
   this->bpm_->NewPage(&new_internal_id);
-
   WritePageGuard guard = this->bpm_->FetchPageWrite(new_internal_id);
   auto new_internal = guard.AsMut<InternalPage>();
   new_internal->Init(this->internal_max_size_);
@@ -222,7 +221,7 @@ auto BPLUSTREE_TYPE::SplitInternalNode(InternalPage *old_internal, page_id_t old
 
     root_page->IncreaseSize(1);
     root_page->SetValueAt(0, old_internal_id);
-    this->InsertEntryInInternal(root_page, this->GetRootPageId(), up_key, new_internal_id, ctx);
+    this->InsertEntryInInternal(root_page, new_root_id, up_key, new_internal_id, ctx);
   } else {
     auto parent_guard = std::move(ctx->write_set_.back().first);
     auto parent_id = ctx->write_set_.back().second;
