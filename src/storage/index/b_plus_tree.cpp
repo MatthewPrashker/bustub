@@ -148,6 +148,7 @@ auto BPLUSTREE_TYPE::InsertEntryInLeaf(LeafPage *page, page_id_t page_id, const 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::InsertEntryInInternal(InternalPage *page, page_id_t page_id, const KeyType &key,
                                            const page_id_t &value, Context *ctx, bool replace) -> bool {
+
   int insert_index = 1;
   while (insert_index < page->GetSize() && this->comparator_(page->KeyAt(insert_index), key) < 0) {
     insert_index++;
@@ -208,6 +209,7 @@ auto BPLUSTREE_TYPE::SplitInternalNode(InternalPage *old_internal, page_id_t old
     this->InsertEntryInInternal(new_internal, new_internal_id, key, val, ctx);
   }
   auto up_key = old_internal->KeyAt(min_size);
+  auto up_val = old_internal->ValueAt(min_size);
 
   // Truncate the old internal node
   old_internal->SetSize(old_internal->GetMinSize());
@@ -227,7 +229,7 @@ auto BPLUSTREE_TYPE::SplitInternalNode(InternalPage *old_internal, page_id_t old
     ctx->write_set_.pop_back();
     auto parent_page = parent_guard.AsMut<InternalPage>();
 
-    new_internal->SetValueAt(0, parent_page->ValueAt(0));
+    new_internal->SetValueAt(0, up_val);
     this->InsertEntryInInternal(parent_page, parent_id, up_key, new_internal_id, ctx, true);
   }
   return new_internal_id;
