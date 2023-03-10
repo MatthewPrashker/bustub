@@ -97,10 +97,13 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::MakeNewRoot(bool as_leaf) -> page_id_t {
   page_id_t root_page_id;
   this->bpm_->NewPage(&root_page_id);
+  this->bpm_->UnpinPage(root_page_id, false);
 
   // set new root id in the header page
   WritePageGuard header_guard = this->bpm_->FetchPageWrite(this->header_page_id_);
   auto header_page = header_guard.AsMut<BPlusTreeHeaderPage>();
+  BUSTUB_ASSERT(header_page != nullptr, "Failed to allocate page in Make New Root");
+
   header_page->root_page_id_ = root_page_id;
 
   // Initialize the root page
@@ -160,7 +163,6 @@ auto BPLUSTREE_TYPE::InsertEntryInInternal(InternalPage *page, page_id_t page_id
     }
     return false;
   }
-  std::cout << "Inserting in internal at index " << insert_index << "\n";
   std::vector<std::pair<KeyType, page_id_t>> tmp;
   for (int i = insert_index; i < page->GetSize(); i++) {
     tmp.emplace_back(page->KeyAt(i), page->ValueAt(i));
@@ -193,8 +195,12 @@ auto BPLUSTREE_TYPE::SplitInternalNode(InternalPage *old_internal, page_id_t old
     -> page_id_t {
   page_id_t new_internal_id;
   this->bpm_->NewPage(&new_internal_id);
+  this->bpm_->UnpinPage(new_internal_id, false);
+
   WritePageGuard guard = this->bpm_->FetchPageWrite(new_internal_id);
   auto new_internal = guard.AsMut<InternalPage>();
+  BUSTUB_ASSERT(new_internal != nullptr, "Failed to allocate page in SplitInternalNode");
+
   new_internal->Init(this->internal_max_size_);
 
   // Insert entries into new internal node
@@ -237,9 +243,12 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Context *ctx) -> page_id_t {
   page_id_t new_leaf_id;
   this->bpm_->NewPage(&new_leaf_id);
+  this->bpm_->UnpinPage(new_leaf_id, false);
 
   WritePageGuard guard = this->bpm_->FetchPageWrite(new_leaf_id);
   auto new_leaf = guard.AsMut<LeafPage>();
+  BUSTUB_ASSERT(new_leaf != nullptr, "Failed to allocate page in SplitLeafNode");
+
   new_leaf->Init(this->leaf_max_size_);
 
   // Insert latter half of entries into new_leaf
@@ -250,7 +259,6 @@ auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Co
     std::cout << "inserting " << key << " into leaf\n";
     this->InsertEntryInLeaf(new_leaf, new_leaf_id, key, val, ctx);
   }
-
   // Truncate existing entries from the node
   old_leaf->SetSize(old_leaf->GetMinSize());
   bool leaf_is_root = (this->GetRootPageId() == old_leaf_id);
