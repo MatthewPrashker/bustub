@@ -17,6 +17,8 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, page_id_t header_page_id, BufferPool
       leaf_max_size_(leaf_max_size),
       internal_max_size_(internal_max_size),
       header_page_id_(header_page_id) {
+  std::cout << "Constructing tree with leaf_max_size " << leaf_max_size << " "
+            << " internal max size " << internal_max_size << "\n";
   WritePageGuard guard = bpm_->FetchPageWrite(header_page_id_);
   auto header_page = guard.AsMut<BPlusTreeHeaderPage>();
   header_page->root_page_id_ = INVALID_PAGE_ID;
@@ -256,9 +258,9 @@ auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Co
   for (int i = 0; i + min_size < old_leaf->GetSize(); i++) {
     auto key = old_leaf->KeyAt(i + min_size);
     auto val = old_leaf->ValueAt(i + min_size);
-    std::cout << "inserting " << key << " into leaf\n";
     this->InsertEntryInLeaf(new_leaf, new_leaf_id, key, val, ctx);
   }
+  old_leaf->SetNextPageId(new_leaf_id);
   // Truncate existing entries from the node
   old_leaf->SetSize(old_leaf->GetMinSize());
   bool leaf_is_root = (this->GetRootPageId() == old_leaf_id);
@@ -293,6 +295,7 @@ auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Co
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *txn) -> bool {
+  std::cout << "Inserting " << key << "\n";
   if (this->IsEmpty()) {
     // Make root as leaf node
     this->MakeNewRoot(true);
