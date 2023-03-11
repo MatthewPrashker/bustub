@@ -189,8 +189,13 @@ auto BPLUSTREE_TYPE::InternalPageFull(InternalPage *page) const -> bool {
   return (page->GetSize() > page->GetMaxSize());
 }
 
-// Make InternalPageFull
-// Make SplitInternalNode
+// TODO (mprashker)
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::InternalCanAbsorbInsert(const InternalPage *page) const -> bool { return false; }
+
+// TODO (mprashker)
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::InternalCanAbsorbDelete(const InternalPage *page) const -> bool { return false; }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::SplitInternalNode(InternalPage *old_internal, page_id_t old_internal_id, Context *ctx)
@@ -278,9 +283,6 @@ auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Co
     auto parent_id = ctx->write_set_.back().second;
     ctx->write_set_.pop_back();
     auto parent_page = parent_guard.AsMut<InternalPage>();
-    // Insert In Internal may potentially split the node, in which case the insertion
-    // will return false, so we keep retrying (most likely at most 1 time).
-    // this->InsertEntryInInternal(parent_page, parent_id, old_leaf->KeyAt(0), old_leaf_id, ctx, true);
     this->InsertEntryInInternal(parent_page, parent_id, new_leaf->KeyAt(0), new_leaf_id, ctx, true);
   }
   return new_leaf_id;
@@ -297,7 +299,7 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *txn) -> bool {
   std::cout << "Inserting " << key << "\n";
   if (this->IsEmpty()) {
-    // Make root as leaf node
+    // Make new root as leaf node
     this->MakeNewRoot(true);
   }
   // Iterate from the root until we find a non-leaf node.
@@ -307,8 +309,14 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
 
   page_id_t cur_pid = this->GetRootPageId();
   while (!cur_page->IsLeafPage()) {
-    ctx.write_set_.emplace_back(std::move(cur_guard), cur_pid);
+    // We will never modify nodes above cur_page,
+    // so it is safe to release all locks above this node
     auto internal_page = reinterpret_cast<const InternalPage *>(cur_page);
+    if (this->InternalCanAbsorbInsert(internal_page)) {
+      ctx.UnlockWriteSet();
+    }
+
+    ctx.write_set_.emplace_back(std::move(cur_guard), cur_pid);
 
     // Update cur to child
     cur_pid = this->GetChildIndex(internal_page, key);
@@ -323,6 +331,20 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
 /*****************************************************************************
  * REMOVE
  *****************************************************************************/
+
+// TODO (mprashker)
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::RemoveEntryInInternal(InternalPage *page, page_id_t page_id, const KeyType &key, Context *ctx)
+    -> bool {
+  return false;
+}
+
+// TODO (mprashker)
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::RemoveEntryInLeaf(LeafPage *page, page_id_t page_id, const KeyType &key, Context *ctx) -> bool {
+  return false;
+}
+
 /*
  * Delete key & value pair associated with input key
  * If current tree is empty, return immediately.

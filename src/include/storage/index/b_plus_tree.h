@@ -85,6 +85,10 @@ class BPlusTree {
 
   auto InternalPageFull(InternalPage *page) const -> bool;
 
+  auto InternalCanAbsorbInsert(const InternalPage *page) const -> bool;
+
+  auto InternalCanAbsorbDelete(const InternalPage *page) const -> bool;
+
   auto SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Context *ctx) -> page_id_t;
 
   auto SplitInternalNode(InternalPage *old_internal, page_id_t old_internal_id, Context *ctx) -> page_id_t;
@@ -92,8 +96,12 @@ class BPlusTree {
   auto InsertEntryInLeaf(LeafPage *page, page_id_t page_id, const KeyType &key, const ValueType &val, Context *ctx)
       -> bool;
 
+  auto RemoveEntryInLeaf(LeafPage *page, page_id_t page_id, const KeyType &key, Context *ctx) -> bool;
+
   auto InsertEntryInInternal(InternalPage *page, page_id_t page_id, const KeyType &key, const page_id_t &value,
                              Context *ctx, bool replace = false) -> bool;
+
+  auto RemoveEntryInInternal(InternalPage *page, page_id_t page_id, const KeyType &key, Context *ctx) -> bool;
 
   auto FindValueInLeaf(const LeafPage *page, const KeyType &key, std::vector<ValueType> *result) const -> bool;
 

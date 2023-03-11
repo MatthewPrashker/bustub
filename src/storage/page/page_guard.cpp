@@ -56,10 +56,14 @@ auto ReadPageGuard::operator=(ReadPageGuard &&that) noexcept -> ReadPageGuard & 
 }
 
 void ReadPageGuard::Drop() {
-  if (this->guard_.page_ != nullptr) {
-    this->guard_.page_->RUnlatch();
+  if (this->guard_.page_ == nullptr) {
+    return;
   }
-  this->guard_.Drop();
+
+  this->guard_.bpm_->UnpinPage(this->guard_.page_->GetPageId(), this->guard_.is_dirty_);
+  this->guard_.bpm_ = nullptr;
+  this->guard_.page_->WUnlatch();
+  this->guard_.page_ = nullptr;
 }
 
 ReadPageGuard::~ReadPageGuard() { this->Drop(); }
@@ -80,10 +84,14 @@ auto WritePageGuard::operator=(WritePageGuard &&that) noexcept -> WritePageGuard
 }
 
 void WritePageGuard::Drop() {
-  if (this->guard_.page_ != nullptr) {
-    this->guard_.page_->WUnlatch();
+  if (this->guard_.page_ == nullptr) {
+    return;
   }
-  this->guard_.Drop();
+
+  this->guard_.bpm_->UnpinPage(this->guard_.page_->GetPageId(), this->guard_.is_dirty_);
+  this->guard_.bpm_ = nullptr;
+  this->guard_.page_->WUnlatch();
+  this->guard_.page_ = nullptr;
 }
 
 WritePageGuard::~WritePageGuard() { this->Drop(); }
