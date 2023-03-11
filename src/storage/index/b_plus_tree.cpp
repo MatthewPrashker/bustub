@@ -412,6 +412,12 @@ auto BPLUSTREE_TYPE::RemoveEntryInLeaf(LeafPage *page, page_id_t page_id, const 
   return true;
 }
 
+// TODO(mprashker)
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::RemoveOptimistic(const KeyType &key, Transaction *txn) -> bool {
+    return false;
+}
+
 /*
  * Delete key & value pair associated with input key
  * If current tree is empty, return immediately.
