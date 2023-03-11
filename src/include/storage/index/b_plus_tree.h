@@ -57,8 +57,8 @@ class Context {
   auto IsRootPage(page_id_t page_id) -> bool { return page_id == root_page_id_; }
 
   void UnlockWriteSet() {
-      // Release locks in same order they were acquired,
-      // so unlock from front to back
+    // Release locks in same order they were acquired,
+    // so unlock from front to back
     while (!write_set_.empty()) {
       auto guard = std::move(write_set_.front().first);
       write_set_.pop_front();
@@ -115,7 +115,8 @@ class BPlusTree {
   // Insert a key-value pair into this B+ tree.
   auto Insert(const KeyType &key, const ValueType &value, Transaction *txn = nullptr) -> bool;
 
-  auto InsertOptimistic(const KeyType &key, const ValueType &value, Transaction *txn = nullptr) -> bool;
+  auto InsertOptimistic(const KeyType &key, const ValueType &value, Transaction *txn = nullptr)
+      -> std::pair<bool, bool>;
 
   // Remove a key and its value from this B+ tree.
   void Remove(const KeyType &key, Transaction *txn);

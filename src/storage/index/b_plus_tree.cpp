@@ -299,7 +299,8 @@ auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Co
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::InsertOptimistic(const KeyType &key, const ValueType &value, Transaction *txn) -> bool {
+auto BPLUSTREE_TYPE::InsertOptimistic(const KeyType &key, const ValueType &value, Transaction *txn)
+    -> std::pair<bool, bool> {
   Context ctx;
   ReadPageGuard cur_guard = this->bpm_->FetchPageRead(this->GetRootPageId());
   auto cur_page = cur_guard.As<BPlusTreePage>();
@@ -308,7 +309,7 @@ auto BPLUSTREE_TYPE::InsertOptimistic(const KeyType &key, const ValueType &value
   while (!cur_page->IsLeafPage()) {
     auto internal_page = reinterpret_cast<const InternalPage *>(cur_page);
     if (!this->InternalCanAbsorbInsert(internal_page)) {
-      return false;
+      return {false, false};
     }
     // Update cur to child
     cur_pid = this->GetChildIndex(internal_page, key);
@@ -320,9 +321,9 @@ auto BPLUSTREE_TYPE::InsertOptimistic(const KeyType &key, const ValueType &value
   WritePageGuard leaf_guard = this->bpm_->FetchPageWrite(cur_pid);
   auto leaf_page = leaf_guard.AsMut<LeafPage>();
   if (!this->LeafCanAbsorbInsert(leaf_page)) {
-    return false;
+    return {false, false};
   }
-  return this->InsertEntryInLeaf(leaf_page, cur_pid, key, value, &ctx);
+  return {true, this->InsertEntryInLeaf(leaf_page, cur_pid, key, value, &ctx)};
 }
 
 /*
@@ -338,9 +339,9 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     // Make new root as leaf node
     this->MakeNewRoot(true);
   }
-
-  if (this->InsertOptimistic(key, value, txn)) {
-    return true;
+  auto optimistic_ret = this->InsertOptimistic(key, value, txn);
+  if (optimistic_ret.first) {
+    return optimistic_ret.second;
   }
 
   // Iterate from the root until we find a non-leaf node.
@@ -414,9 +415,7 @@ auto BPLUSTREE_TYPE::RemoveEntryInLeaf(LeafPage *page, page_id_t page_id, const 
 
 // TODO(mprashker)
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::RemoveOptimistic(const KeyType &key, Transaction *txn) -> bool {
-    return false;
-}
+auto BPLUSTREE_TYPE::RemoveOptimistic(const KeyType &key, Transaction *txn) -> bool { return false; }
 
 /*
  * Delete key & value pair associated with input key
