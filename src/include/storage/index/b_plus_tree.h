@@ -87,6 +87,8 @@ class BPlusTree {
 
   auto InternalCanAbsorbInsert(const InternalPage *page) const -> bool;
 
+  auto LeafCanAbsorbInsert(const LeafPage *page) const -> bool;
+
   auto InternalCanAbsorbDelete(const InternalPage *page) const -> bool;
 
   auto SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Context *ctx) -> page_id_t;
@@ -110,6 +112,8 @@ class BPlusTree {
 
   // Insert a key-value pair into this B+ tree.
   auto Insert(const KeyType &key, const ValueType &value, Transaction *txn = nullptr) -> bool;
+
+  auto InsertOptimistic(const KeyType &key, const ValueType &value, Transaction *txn = nullptr) -> bool;
 
   // Remove a key and its value from this B+ tree.
   void Remove(const KeyType &key, Transaction *txn);

@@ -17,8 +17,6 @@ BPLUSTREE_TYPE::BPlusTree(std::string name, page_id_t header_page_id, BufferPool
       leaf_max_size_(leaf_max_size),
       internal_max_size_(internal_max_size),
       header_page_id_(header_page_id) {
-  std::cout << "Constructing tree with leaf_max_size " << leaf_max_size << " "
-            << " internal max size " << internal_max_size << "\n";
   WritePageGuard guard = bpm_->FetchPageWrite(header_page_id_);
   auto header_page = guard.AsMut<BPlusTreeHeaderPage>();
   header_page->root_page_id_ = INVALID_PAGE_ID;
@@ -97,13 +95,18 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
  *****************************************************************************/
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::MakeNewRoot(bool as_leaf) -> page_id_t {
-  page_id_t root_page_id;
-  this->bpm_->NewPage(&root_page_id);
-  this->bpm_->UnpinPage(root_page_id, false);
-
   // set new root id in the header page
   WritePageGuard header_guard = this->bpm_->FetchPageWrite(this->header_page_id_);
   auto header_page = header_guard.AsMut<BPlusTreeHeaderPage>();
+  if (as_leaf && header_page->root_page_id_ != INVALID_PAGE_ID) {
+    // Between when a thread saw that the tree was empty and called MakeNewRoot
+    // another thread already created a new root
+    return INVALID_PAGE_ID;
+  }
+
+  page_id_t root_page_id;
+  this->bpm_->NewPage(&root_page_id);
+  this->bpm_->UnpinPage(root_page_id, false);
   BUSTUB_ASSERT(header_page != nullptr, "Failed to allocate page in Make New Root");
 
   header_page->root_page_id_ = root_page_id;
@@ -189,13 +192,20 @@ auto BPLUSTREE_TYPE::InternalPageFull(InternalPage *page) const -> bool {
   return (page->GetSize() > page->GetMaxSize());
 }
 
-// TODO (mprashker)
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::InternalCanAbsorbInsert(const InternalPage *page) const -> bool { return false; }
+auto BPLUSTREE_TYPE::InternalCanAbsorbInsert(const InternalPage *page) const -> bool {
+  return (page->GetSize() + 1 <= page->GetMaxSize());
+}
 
-// TODO (mprashker)
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::InternalCanAbsorbDelete(const InternalPage *page) const -> bool { return false; }
+auto BPLUSTREE_TYPE::LeafCanAbsorbInsert(const LeafPage *page) const -> bool {
+  return (page->GetSize() + 1 < page->GetMaxSize());
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::InternalCanAbsorbDelete(const InternalPage *page) const -> bool {
+  return (page->GetSize() - 1 >= page->GetMinSize());
+}
 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::SplitInternalNode(InternalPage *old_internal, page_id_t old_internal_id, Context *ctx)
@@ -288,6 +298,33 @@ auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Co
   return new_leaf_id;
 }
 
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::InsertOptimistic(const KeyType &key, const ValueType &value, Transaction *txn) -> bool {
+  Context ctx;
+  ReadPageGuard cur_guard = this->bpm_->FetchPageRead(this->GetRootPageId());
+  auto cur_page = cur_guard.As<BPlusTreePage>();
+  page_id_t cur_pid = this->GetRootPageId();
+
+  while (!cur_page->IsLeafPage()) {
+    auto internal_page = reinterpret_cast<const InternalPage *>(cur_page);
+    if (!this->InternalCanAbsorbInsert(internal_page)) {
+      return false;
+    }
+    // Update cur to child
+    cur_pid = this->GetChildIndex(internal_page, key);
+    cur_guard = this->bpm_->FetchPageRead(cur_pid);
+    cur_page = cur_guard.As<BPlusTreePage>();
+  }
+  cur_guard.Drop();
+
+  WritePageGuard leaf_guard = this->bpm_->FetchPageWrite(cur_pid);
+  auto leaf_page = leaf_guard.AsMut<LeafPage>();
+  if (!this->LeafCanAbsorbInsert(leaf_page)) {
+    return false;
+  }
+  return this->InsertEntryInLeaf(leaf_page, cur_pid, key, value, &ctx);
+}
+
 /*
  * Insert constant key & value pair into b+ tree
  * if current tree is empty, start new tree, update root page id and insert
@@ -297,22 +334,107 @@ auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Co
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transaction *txn) -> bool {
-  std::cout << "Inserting " << key << "\n";
   if (this->IsEmpty()) {
     // Make new root as leaf node
     this->MakeNewRoot(true);
+  }
+
+  if (this->InsertOptimistic(key, value, txn)) {
+    return true;
+  }
+
+  // Iterate from the root until we find a non-leaf node.
+  Context ctx;
+  WritePageGuard cur_guard = this->bpm_->FetchPageWrite(this->GetRootPageId());
+  auto cur_page = cur_guard.AsMut<BPlusTreePage>();
+  page_id_t cur_pid = this->GetRootPageId();
+
+  while (!cur_page->IsLeafPage()) {
+    auto internal_page = reinterpret_cast<const InternalPage *>(cur_page);
+    if (this->InternalCanAbsorbInsert(internal_page)) {
+      // We will never modify nodes above the current page
+      // So it is safe to release all locks above this node
+      ctx.UnlockWriteSet();
+    }
+
+    ctx.write_set_.emplace_back(std::move(cur_guard), cur_pid);
+
+    // Update cur to child
+    cur_pid = this->GetChildIndex(internal_page, key);
+    cur_guard = this->bpm_->FetchPageWrite(cur_pid);
+    cur_page = cur_guard.AsMut<BPlusTreePage>();
+  }
+
+  auto leaf_page = cur_guard.AsMut<LeafPage>();
+  if (this->LeafCanAbsorbInsert(leaf_page)) {
+    // If we know that there will not be any splits
+    // we release all write locks above this node
+    ctx.UnlockWriteSet();
+  }
+
+  return this->InsertEntryInLeaf(leaf_page, cur_pid, key, value, &ctx);
+}
+
+/*****************************************************************************
+ * REMOVE
+ *****************************************************************************/
+
+// TODO(mprashker)
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::RemoveEntryInInternal(InternalPage *page, page_id_t page_id, const KeyType &key, Context *ctx)
+    -> bool {
+  return false;
+}
+
+// TODO(mprashker)
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::RemoveEntryInLeaf(LeafPage *page, page_id_t page_id, const KeyType &key, Context *ctx) -> bool {
+  int key_index = -1;
+  for (int i = 0; i < page->GetSize(); i++) {
+    if (this->comparator_(page->KeyAt(i), key) == 0) {
+      key_index = i;
+      break;
+    }
+  }
+  if (key_index == -1) {
+    // Key not present
+    return false;
+  }
+  std::vector<std::pair<KeyType, ValueType>> suffix;
+  for (int i = key_index + 1; i < page->GetSize(); i++) {
+    suffix.emplace_back(page->KeyAt(i), page->ValueAt(i));
+  }
+  for (size_t i = 0; i < suffix.size(); i++) {
+    page->SetKeyAndValueAt(key_index + i, suffix[i].first, suffix[i].second);
+  }
+  page->IncreaseSize(-1);
+
+  return true;
+}
+
+/*
+ * Delete key & value pair associated with input key
+ * If current tree is empty, return immediately.
+ * If not, User needs to first find the right leaf page as deletion target, then
+ * delete entry from leaf page. Remember to deal with redistribute or merge if
+ * necessary.
+ */
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
+  if (this->IsEmpty()) {
+    return;
   }
   // Iterate from the root until we find a non-leaf node.
   Context ctx;
   WritePageGuard cur_guard = this->bpm_->FetchPageWrite(this->GetRootPageId());
   auto cur_page = cur_guard.AsMut<BPlusTreePage>();
-
   page_id_t cur_pid = this->GetRootPageId();
+
   while (!cur_page->IsLeafPage()) {
-    // We will never modify nodes above cur_page,
-    // so it is safe to release all locks above this node
     auto internal_page = reinterpret_cast<const InternalPage *>(cur_page);
-    if (this->InternalCanAbsorbInsert(internal_page)) {
+    if (this->InternalCanAbsorbDelete(internal_page)) {
+      // We will never modify nodes above the current page
+      // So it is safe to release all locks above this node
       ctx.UnlockWriteSet();
     }
 
@@ -325,38 +447,10 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   }
 
   auto *leaf_page = cur_guard.AsMut<LeafPage>();
-  return this->InsertEntryInLeaf(leaf_page, cur_pid, key, value, &ctx);
-}
-
-/*****************************************************************************
- * REMOVE
- *****************************************************************************/
-
-// TODO (mprashker)
-INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::RemoveEntryInInternal(InternalPage *page, page_id_t page_id, const KeyType &key, Context *ctx)
-    -> bool {
-  return false;
-}
-
-// TODO (mprashker)
-INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::RemoveEntryInLeaf(LeafPage *page, page_id_t page_id, const KeyType &key, Context *ctx) -> bool {
-  return false;
-}
-
-/*
- * Delete key & value pair associated with input key
- * If current tree is empty, return immediately.
- * If not, User needs to first find the right leaf page as deletion target, then
- * delete entry from leaf page. Remember to deal with redistribute or merge if
- * necessary.
- */
-INDEX_TEMPLATE_ARGUMENTS
-void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
-  // Declaration of context instance.
-  Context ctx;
-  (void)ctx;
+  if (this->LeafCanAbsorbInsert(leaf_page)) {
+    ctx.UnlockWriteSet();
+  }
+  this->RemoveEntryInLeaf(leaf_page, cur_pid, key, &ctx);
 }
 
 /*****************************************************************************
