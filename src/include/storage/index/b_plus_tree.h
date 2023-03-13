@@ -64,6 +64,13 @@ class Context {
       write_set_.pop_front();
     }
   }
+
+  void UnlockReadSet() {
+    while (!read_set_.empty()) {
+      auto guard = std::move(read_set_.front());
+      read_set_.pop_front();
+    }
+  }
 };
 
 #define BPLUSTREE_TYPE BPlusTree<KeyType, ValueType, KeyComparator>
