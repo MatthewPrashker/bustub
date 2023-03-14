@@ -90,9 +90,15 @@ class BPlusTree {
 
   auto GetChildIndex(const InternalPage *page, const KeyType &key) const -> page_id_t;
 
+  auto LeafContainingKey(const KeyType &key) const -> ReadPageGuard;
+
   auto LeafPageFull(LeafPage *page) const -> bool;
 
+  auto LeafPageTooSmall(LeafPage *page) const -> bool;
+
   auto InternalPageFull(InternalPage *page) const -> bool;
+
+  auto InternalPageTooSmall(InternalPage *page) const -> bool;
 
   auto InternalCanAbsorbInsert(const InternalPage *page) const -> bool;
 
@@ -100,7 +106,11 @@ class BPlusTree {
 
   auto InternalCanAbsorbDelete(const InternalPage *page) const -> bool;
 
+  auto LeafCanAbsorbDelete(const LeafPage *page) const -> bool;
+
   auto SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Context *ctx) -> page_id_t;
+
+  void CoalescesLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Context *ctx);
 
   auto SplitInternalNode(InternalPage *old_internal, page_id_t old_internal_id, Context *ctx) -> page_id_t;
 
@@ -134,7 +144,7 @@ class BPlusTree {
   auto GetValue(const KeyType &key, std::vector<ValueType> *result, Transaction *txn = nullptr) -> bool;
 
   // Return the page id of the root node
-  auto GetRootPageId() -> page_id_t;
+  auto GetRootPageId() const -> page_id_t;
 
   // Index iterator
   auto Begin() -> INDEXITERATOR_TYPE;

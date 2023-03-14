@@ -91,6 +91,13 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
   if (this->IsEmpty()) {
     return false;
   }
+  ReadPageGuard leaf_guard = std::move(this->LeafContainingKey(key));
+  auto leaf_page = leaf_guard.As<LeafPage>();
+  return this->FindValueInLeaf(leaf_page, key, result);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::LeafContainingKey(const KeyType &key) const -> ReadPageGuard {
   Context ctx;
   ReadPageGuard cur_guard = this->bpm_->FetchPageRead(this->GetRootPageId());
   auto cur_page = cur_guard.As<BPlusTreePage>();
@@ -108,14 +115,54 @@ auto BPLUSTREE_TYPE::GetValue(const KeyType &key, std::vector<ValueType> *result
     cur_guard = this->bpm_->FetchPageRead(child_pid);
     cur_page = cur_guard.As<BPlusTreePage>();
   }
-
-  auto leaf_page = reinterpret_cast<const LeafPage *>(cur_page);
-  return this->FindValueInLeaf(leaf_page, key, result);
+  return cur_guard;
 }
 
 /*****************************************************************************
  * INSERTION
  *****************************************************************************/
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::LeafPageFull(LeafPage *page) const -> bool {
+    BUSTUB_ASSERT(page->GetSize() <= page->GetMaxSize(), "Page size should never exceed max size");
+    return (page->GetSize() == page->GetMaxSize());
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::LeafPageTooSmall(LeafPage *page) const -> bool {
+    return (page->GetSize() < page->GetMinSize());
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::InternalPageFull(InternalPage *page) const -> bool {
+  return (page->GetSize() > page->GetMaxSize());
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::InternalPageTooSmall(InternalPage *page) const -> bool {
+    return (page->GetSize() < page->GetMinSize());
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::InternalCanAbsorbInsert(const InternalPage *page) const -> bool {
+  return (page->GetSize() + 1 <= page->GetMaxSize());
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::LeafCanAbsorbInsert(const LeafPage *page) const -> bool {
+  return (page->GetSize() + 1 < page->GetMaxSize());
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::InternalCanAbsorbDelete(const InternalPage *page) const -> bool {
+  return (page->GetSize() - 1 >= page->GetMinSize());
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::LeafCanAbsorbDelete(const LeafPage *page) const -> bool {
+    return (page->GetSize() - 1 >= page->GetMinSize());
+}
+
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::MakeNewRoot(bool as_leaf) -> page_id_t {
   // set new root id in the header page
@@ -205,29 +252,6 @@ auto BPLUSTREE_TYPE::InsertEntryInInternal(InternalPage *page, page_id_t page_id
     this->SplitInternalNode(page, page_id, ctx);
   }
   return true;
-}
-
-INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::LeafPageFull(LeafPage *page) const -> bool { return (page->GetSize() == page->GetMaxSize()); }
-
-INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::InternalPageFull(InternalPage *page) const -> bool {
-  return (page->GetSize() > page->GetMaxSize());
-}
-
-INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::InternalCanAbsorbInsert(const InternalPage *page) const -> bool {
-  return (page->GetSize() + 1 <= page->GetMaxSize());
-}
-
-INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::LeafCanAbsorbInsert(const LeafPage *page) const -> bool {
-  return (page->GetSize() + 1 < page->GetMaxSize());
-}
-
-INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::InternalCanAbsorbDelete(const InternalPage *page) const -> bool {
-  return (page->GetSize() - 1 >= page->GetMinSize());
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -421,6 +445,14 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
  * REMOVE
  *****************************************************************************/
 
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::CoalescesLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Context *ctx) {
+    auto parent_guard = std::move(ctx->write_set_.back());
+    ctx->write_set_.pop_back();
+
+
+}
+
 // TODO(mprashker)
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::RemoveEntryInInternal(InternalPage *page, page_id_t page_id, const KeyType &key, Context *ctx)
@@ -450,7 +482,9 @@ auto BPLUSTREE_TYPE::RemoveEntryInLeaf(LeafPage *page, page_id_t page_id, const 
     page->SetKeyAndValueAt(key_index + i, suffix[i].first, suffix[i].second);
   }
   page->IncreaseSize(-1);
-
+  if (!ctx->IsRootPage(page_id) && this->LeafPageTooSmall(page)) {
+      this->CoalescesLeafNode(page, page_id, ctx);
+  }
   return true;
 }
 
@@ -475,6 +509,8 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
   WritePageGuard cur_guard = this->bpm_->FetchPageWrite(this->GetRootPageId());
   auto cur_page = cur_guard.AsMut<BPlusTreePage>();
   page_id_t cur_pid = this->GetRootPageId();
+  ctx.root_page_id_ = cur_pid;
+
 
   while (!cur_page->IsLeafPage()) {
     auto internal_page = reinterpret_cast<const InternalPage *>(cur_page);
@@ -492,8 +528,8 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
     cur_page = cur_guard.AsMut<BPlusTreePage>();
   }
 
-  auto *leaf_page = cur_guard.AsMut<LeafPage>();
-  if (this->LeafCanAbsorbInsert(leaf_page)) {
+  auto leaf_page = cur_guard.AsMut<LeafPage>();
+  if (this->LeafCanAbsorbDelete(leaf_page)) {
     ctx.UnlockWriteSet();
   }
   this->RemoveEntryInLeaf(leaf_page, cur_pid, key, &ctx);
@@ -530,7 +566,7 @@ auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE(); 
  * @return Page id of the root of this tree
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::GetRootPageId() -> page_id_t {
+auto BPLUSTREE_TYPE::GetRootPageId() const -> page_id_t {
   ReadPageGuard guard = this->bpm_->FetchPageRead(header_page_id_);
   auto header_page = guard.As<BPlusTreeHeaderPage>();
   return header_page->root_page_id_;
