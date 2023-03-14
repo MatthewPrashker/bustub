@@ -455,9 +455,29 @@ void BPLUSTREE_TYPE::CoalescesLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id
   WritePageGuard parent_guard = std::move(ctx->write_set_.back().first);
   // page_id_t parent_pid = ctx->write_set_.back().second;
   ctx->write_set_.pop_back();
-  auto parent_page = parent_guard.AsMut<InternalPage>();
+  InternalPage* parent_page = parent_guard.AsMut<InternalPage>();
 
   auto key_index = this->GetInternalIndexForKey(parent_page, key);
+  bool key_at_end = (key_index == parent_page->GetSize() - 1);
+  bool key_at_beginning = (key_index == 0);
+
+  // If we can combine the nodes, then we do this,
+  // otherwise, we just borrow a single key from a
+  // a neighboring node.
+
+
+  if(key_at_end) {
+      auto prev_leaf_id = parent_page->ValueAt(key_index - 1);
+      WritePageGuard prev_leaf_guard = this->bpm_->FetchPageWrite(prev_leaf_id);
+      auto prev_leaf_page = prev_leaf_guard.As<LeafPage>();
+      if(old_leaf->GetSize() + prev_leaf_page->GetSize() <= this->leaf_max_size_) {
+
+      }
+  }
+
+  if(key_at_beginning) {
+
+  }
   std::cout << "Coalescesing parent index " << key_index << "\n";
 }
 
