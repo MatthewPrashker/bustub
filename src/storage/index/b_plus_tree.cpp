@@ -38,12 +38,12 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
  *****************************************************************************/
 
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::GetChildIndex(const InternalPage *page, const KeyType &key) const -> page_id_t {
+auto BPLUSTREE_TYPE::GetInternalIndexForKey(const InternalPage *page, const KeyType &key) const -> int {
   if (this->comparator_(key, page->KeyAt(1)) < 0) {
-    return page->ValueAt(0);
+    return 0;
   }
   if (this->comparator_(key, page->KeyAt(page->GetSize() - 1)) >= 0) {
-    return page->ValueAt(page->GetSize() - 1);
+    return page->GetSize() - 1;
   }
 
   int lo = 1;
@@ -62,9 +62,15 @@ auto BPLUSTREE_TYPE::GetChildIndex(const InternalPage *page, const KeyType &key)
   }
   if (hi + 1 < page->GetSize() && this->comparator_(page->KeyAt(hi), key) <= 0 &&
       this->comparator_(key, page->KeyAt(hi + 1)) < 0) {
-    return page->ValueAt(hi);
+    return hi;
   }
-  return page->ValueAt(lo);
+  return lo;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::GetChildPage(const InternalPage *page, const KeyType &key) const -> page_id_t {
+  int key_index = this->GetInternalIndexForKey(page, key);
+  return page->ValueAt(key_index);
 }
 
 // TODO(mprashker): Replace with binary search
@@ -110,7 +116,7 @@ auto BPLUSTREE_TYPE::LeafContainingKey(const KeyType &key) const -> ReadPageGuar
       auto tmp_guard = std::move(ctx.read_set_.back());
       ctx.read_set_.pop_back();
     }
-    auto child_pid = this->GetChildIndex(internal_page, key);
+    auto child_pid = this->GetChildPage(internal_page, key);
     // Update cur to child
     cur_guard = this->bpm_->FetchPageRead(child_pid);
     cur_page = cur_guard.As<BPlusTreePage>();
@@ -124,14 +130,12 @@ auto BPLUSTREE_TYPE::LeafContainingKey(const KeyType &key) const -> ReadPageGuar
 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::LeafPageFull(LeafPage *page) const -> bool {
-    BUSTUB_ASSERT(page->GetSize() <= page->GetMaxSize(), "Page size should never exceed max size");
-    return (page->GetSize() == page->GetMaxSize());
+  BUSTUB_ASSERT(page->GetSize() <= page->GetMaxSize(), "Page size should never exceed max size");
+  return (page->GetSize() == page->GetMaxSize());
 }
 
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::LeafPageTooSmall(LeafPage *page) const -> bool {
-    return (page->GetSize() < page->GetMinSize());
-}
+auto BPLUSTREE_TYPE::LeafPageTooSmall(LeafPage *page) const -> bool { return (page->GetSize() < page->GetMinSize()); }
 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::InternalPageFull(InternalPage *page) const -> bool {
@@ -140,7 +144,7 @@ auto BPLUSTREE_TYPE::InternalPageFull(InternalPage *page) const -> bool {
 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::InternalPageTooSmall(InternalPage *page) const -> bool {
-    return (page->GetSize() < page->GetMinSize());
+  return (page->GetSize() < page->GetMinSize());
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -160,7 +164,7 @@ auto BPLUSTREE_TYPE::InternalCanAbsorbDelete(const InternalPage *page) const -> 
 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::LeafCanAbsorbDelete(const LeafPage *page) const -> bool {
-    return (page->GetSize() - 1 >= page->GetMinSize());
+  return (page->GetSize() - 1 >= page->GetMinSize());
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -376,7 +380,7 @@ auto BPLUSTREE_TYPE::InsertOptimistic(const KeyType &key, const ValueType &value
 
     auto internal_page = reinterpret_cast<const InternalPage *>(cur_page);
     // Update cur to child
-    cur_pid = this->GetChildIndex(internal_page, key);
+    cur_pid = this->GetChildPage(internal_page, key);
 
     cur_guard = this->bpm_->FetchPageRead(cur_pid);
     cur_page = cur_guard.As<BPlusTreePage>();
@@ -427,7 +431,7 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     ctx.write_set_.emplace_back(std::move(cur_guard), cur_pid);
 
     // Update cur to child
-    cur_pid = this->GetChildIndex(internal_page, key);
+    cur_pid = this->GetChildPage(internal_page, key);
     cur_guard = this->bpm_->FetchPageWrite(cur_pid);
     cur_page = cur_guard.AsMut<BPlusTreePage>();
   }
@@ -446,11 +450,15 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
  *****************************************************************************/
 
 INDEX_TEMPLATE_ARGUMENTS
-void BPLUSTREE_TYPE::CoalescesLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Context *ctx) {
-    auto parent_guard = std::move(ctx->write_set_.back());
-    ctx->write_set_.pop_back();
+void BPLUSTREE_TYPE::CoalescesLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, const KeyType &key, Context *ctx) {
+  BUSTUB_ASSERT(!ctx->write_set_.empty(), "Coalesce leaf node without guard on parent");
+  WritePageGuard parent_guard = std::move(ctx->write_set_.back().first);
+  // page_id_t parent_pid = ctx->write_set_.back().second;
+  ctx->write_set_.pop_back();
+  auto parent_page = parent_guard.AsMut<InternalPage>();
 
-
+  auto key_index = this->GetInternalIndexForKey(parent_page, key);
+  std::cout << "Coalescesing parent index " << key_index << "\n";
 }
 
 // TODO(mprashker)
@@ -483,7 +491,7 @@ auto BPLUSTREE_TYPE::RemoveEntryInLeaf(LeafPage *page, page_id_t page_id, const 
   }
   page->IncreaseSize(-1);
   if (!ctx->IsRootPage(page_id) && this->LeafPageTooSmall(page)) {
-      this->CoalescesLeafNode(page, page_id, ctx);
+    this->CoalescesLeafNode(page, page_id, key, ctx);
   }
   return true;
 }
@@ -511,7 +519,6 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
   page_id_t cur_pid = this->GetRootPageId();
   ctx.root_page_id_ = cur_pid;
 
-
   while (!cur_page->IsLeafPage()) {
     auto internal_page = reinterpret_cast<const InternalPage *>(cur_page);
     if (this->InternalCanAbsorbDelete(internal_page)) {
@@ -523,7 +530,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
     ctx.write_set_.emplace_back(std::move(cur_guard), cur_pid);
 
     // Update cur to child
-    cur_pid = this->GetChildIndex(internal_page, key);
+    cur_pid = this->GetChildPage(internal_page, key);
     cur_guard = this->bpm_->FetchPageWrite(cur_pid);
     cur_page = cur_guard.AsMut<BPlusTreePage>();
   }

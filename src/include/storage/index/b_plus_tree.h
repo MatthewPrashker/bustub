@@ -88,7 +88,9 @@ class BPlusTree {
 
   auto MakeNewRoot(bool as_leaf) -> page_id_t;
 
-  auto GetChildIndex(const InternalPage *page, const KeyType &key) const -> page_id_t;
+  auto GetInternalIndexForKey(const InternalPage *page, const KeyType &key) const -> int;
+
+  auto GetChildPage(const InternalPage *page, const KeyType &key) const -> page_id_t;
 
   auto LeafContainingKey(const KeyType &key) const -> ReadPageGuard;
 
@@ -110,7 +112,7 @@ class BPlusTree {
 
   auto SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Context *ctx) -> page_id_t;
 
-  void CoalescesLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Context *ctx);
+  void CoalescesLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, const KeyType &key, Context *ctx);
 
   auto SplitInternalNode(InternalPage *old_internal, page_id_t old_internal_id, Context *ctx) -> page_id_t;
 
