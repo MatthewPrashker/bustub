@@ -86,7 +86,9 @@ class BPlusTree {
                      const KeyComparator &comparator, int leaf_max_size = LEAF_PAGE_SIZE,
                      int internal_max_size = INTERNAL_PAGE_SIZE);
 
-  auto MakeNewRoot(bool as_leaf) -> page_id_t;
+  auto MakeNewRoot(bool as_leaf, Context *ctx) -> WritePageGuard;
+
+  auto GetRootGuardSafe(Context *ctx) -> WritePageGuard;
 
   auto GetInternalIndexForKey(const InternalPage *page, const KeyType &key) const -> int;
 
