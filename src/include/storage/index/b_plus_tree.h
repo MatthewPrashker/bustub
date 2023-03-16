@@ -114,17 +114,23 @@ class BPlusTree {
 
   auto SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Context *ctx) -> page_id_t;
 
-  void CoalescesLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, const KeyType &key, Context *ctx);
-
   auto SplitInternalNode(InternalPage *old_internal, page_id_t old_internal_id, Context *ctx) -> page_id_t;
+
+  void CoalescesNode(BPlusTreePage *page, page_id_t page_id, const KeyType &key, Context *ctx);
 
   auto InsertEntryInLeaf(LeafPage *page, page_id_t page_id, const KeyType &key, const ValueType &val, Context *ctx)
       -> bool;
+
+  auto AppendEntriesInLeaf(LeafPage *page, page_id_t page_id, const std::vector<std::pair<KeyType, ValueType>> &kvs,
+                           Context *ctx);
 
   auto RemoveEntryInLeaf(LeafPage *page, page_id_t page_id, const KeyType &key, Context *ctx) -> bool;
 
   auto InsertEntryInInternal(InternalPage *page, page_id_t page_id, const KeyType &key, const page_id_t &value,
                              Context *ctx, bool replace = false) -> bool;
+
+  auto AppendEntriesInInternal(InternalPage *page, page_id_t page_id,
+                               const std::vector<std::pair<KeyType, page_id_t>> &kvs, Context *ctx);
 
   auto RemoveEntryInInternal(InternalPage *page, page_id_t page_id, const KeyType &key, Context *ctx) -> bool;
 
