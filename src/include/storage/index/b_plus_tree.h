@@ -88,6 +88,8 @@ class BPlusTree {
 
   auto MakeNewRoot(bool as_leaf, Context *ctx) -> WritePageGuard;
 
+  auto GetSmallestKeyInSubTree(const BPlusTreePage *page) const -> KeyType;
+
   auto GetRootGuardSafe(Context *ctx) -> WritePageGuard;
 
   auto GetInternalIndexForKey(const InternalPage *page, const KeyType &key) const -> int;
@@ -117,6 +119,12 @@ class BPlusTree {
   auto SplitInternalNode(InternalPage *old_internal, page_id_t old_internal_id, Context *ctx) -> page_id_t;
 
   void CoalescesNode(BPlusTreePage *page, page_id_t page_id, const KeyType &key, Context *ctx);
+
+  void LeftShift(BPlusTreePage *left_page, page_id_t left_pid, BPlusTreePage *right_page, page_id_t right_pid,
+                 BPlusTreePage *parent_page);
+
+  void RightShift(BPlusTreePage *left_page, page_id_t left_pid, BPlusTreePage *right_page, page_id_t right_pid,
+                  BPlusTreePage *parent_page);
 
   auto InsertEntryInLeaf(LeafPage *page, page_id_t page_id, const KeyType &key, const ValueType &val, Context *ctx)
       -> bool;
