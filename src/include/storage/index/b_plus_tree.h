@@ -94,6 +94,8 @@ class BPlusTree {
 
   auto GetInternalIndexForKey(const InternalPage *page, const KeyType &key) const -> int;
 
+  auto GetInternalIndexForValue(const InternalPage *page, page_id_t value) const -> int;
+
   auto GetChildPage(const InternalPage *page, const KeyType &key) const -> page_id_t;
 
   auto LeafContainingKey(const KeyType &key) const -> ReadPageGuard;
@@ -121,10 +123,10 @@ class BPlusTree {
   void CoalescesNode(BPlusTreePage *page, page_id_t page_id, const KeyType &key, Context *ctx);
 
   void LeftShift(BPlusTreePage *left_page, page_id_t left_pid, BPlusTreePage *right_page, page_id_t right_pid,
-                 BPlusTreePage *parent_page);
+                 InternalPage *parent_page);
 
   void RightShift(BPlusTreePage *left_page, page_id_t left_pid, BPlusTreePage *right_page, page_id_t right_pid,
-                  BPlusTreePage *parent_page);
+                  InternalPage *parent_page);
 
   auto InsertEntryInLeaf(LeafPage *page, page_id_t page_id, const KeyType &key, const ValueType &val, Context *ctx)
       -> bool;

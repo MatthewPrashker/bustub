@@ -38,6 +38,14 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
  *****************************************************************************/
 
 INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::GetInternalIndexForValue(const InternalPage *page, page_id_t value) const -> int {
+    for(int i = 0; i < page->GetSize(); i++) {
+        if(page->ValueAt(i) == value) {return i;}
+    }
+    return -1;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetInternalIndexForKey(const InternalPage *page, const KeyType &key) const -> int {
   if (this->comparator_(key, page->KeyAt(1)) < 0) {
     return 0;
@@ -513,11 +521,14 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
 // Move first entry of right page into last entry of left page
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::LeftShift(BPlusTreePage *left_page, page_id_t left_pid, BPlusTreePage *right_page,
-                               page_id_t right_pid, BPlusTreePage *parent_page) {
+                               page_id_t right_pid, InternalPage *parent_page) {
+    int right_page_index_in_parent = this->GetInternalIndexForValue(parent_page, right_pid);
   if (right_page->IsLeafPage()) {
     BUSTUB_ASSERT(left_page->IsLeafPage(), "Merging non-leaf left page with leaf right page");
     auto right_page_as_leaf = reinterpret_cast<LeafPage *>(right_page);
     auto left_page_as_leaf = reinterpret_cast<LeafPage *>(left_page);
+
+    parent_page->SetKeyAt(right_page_index_in_parent, right_page_as_leaf->KeyAt(0));
     this->InsertEntryInLeaf(left_page_as_leaf, left_pid, right_page_as_leaf->KeyAt(0), right_page_as_leaf->ValueAt(0),
                             nullptr);
     this->RemoveEntryInLeaf(right_page_as_leaf, right_pid, right_page_as_leaf->KeyAt(0), nullptr);
@@ -526,18 +537,18 @@ void BPLUSTREE_TYPE::LeftShift(BPlusTreePage *left_page, page_id_t left_pid, BPl
     auto right_page_as_internal = reinterpret_cast<InternalPage *>(right_page);
     auto smallest_key_in_right_subtree = this->GetSmallestKeyInSubTree(right_page_as_internal);
 
+    parent_page->SetKeyAt(right_page_index_in_parent, right_page_as_internal->KeyAt(1));
     this->InsertEntryInInternal(left_page_as_internal, left_pid, smallest_key_in_right_subtree,
                                 right_page_as_internal->ValueAt(0), nullptr);
     right_page_as_internal->SetValueAt(0, right_page_as_internal->ValueAt(1));
     this->RemoveEntryInInternal(right_page_as_internal, right_pid, right_page_as_internal->KeyAt(1), nullptr);
   }
-  // Need to update an entry in the parent page
 }
 
 // Move last entry of left page as first entry of right page
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::RightShift(BPlusTreePage *left_page, page_id_t left_pid, BPlusTreePage *right_page,
-                                page_id_t right_pid, BPlusTreePage *parent_page) {
+                                page_id_t right_pid, InternalPage *parent_page) {
   if (left_page->IsLeafPage()) {
     BUSTUB_ASSERT(right_page->IsLeafPage(), "Merging non-leaf right page with leaf left page");
     auto left_page_as_leaf = reinterpret_cast<LeafPage *>(left_page);
@@ -555,7 +566,7 @@ void BPLUSTREE_TYPE::RightShift(BPlusTreePage *left_page, page_id_t left_pid, BP
     this->RemoveEntryInInternal(left_page_as_internal, left_pid, last_left_key, nullptr);
   }
 
-  // Need to update entry in the parent page
+    //TODO(mprashker) Need to update entry in parent page
 }
 
 INDEX_TEMPLATE_ARGUMENTS
