@@ -88,6 +88,8 @@ class BPlusTree {
 
   auto MakeNewRoot(bool as_leaf, Context *ctx) -> WritePageGuard;
 
+  void SetRoot(page_id_t new_root_id, Context *ctx);
+
   auto GetSmallestKeyInSubTree(const BPlusTreePage *page) const -> KeyType;
 
   auto GetRootGuardSafe(Context *ctx) -> WritePageGuard;

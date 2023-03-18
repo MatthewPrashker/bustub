@@ -195,13 +195,13 @@ auto BPLUSTREE_TYPE::LeafCanAbsorbDelete(const LeafPage *page) const -> bool {
 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetRootGuardSafe(Context *ctx) -> WritePageGuard {
-  ReadPageGuard header_guard = this->bpm_->FetchPageRead(this->header_page_id_);
+  WritePageGuard header_guard = this->bpm_->FetchPageWrite(this->header_page_id_);
   auto header_page = header_guard.As<BPlusTreeHeaderPage>();
+  ctx->write_set_.emplace_back(std::move(header_guard), this->header_page_id_);
 
   WritePageGuard root_guard;
   if (header_page->root_page_id_ == INVALID_PAGE_ID) {
     // Tree is empty so start a new root
-    header_guard.Drop();
     return this->MakeNewRoot(true, ctx);
   }
   root_guard = this->bpm_->FetchPageWrite(header_page->root_page_id_);
@@ -210,10 +210,22 @@ auto BPLUSTREE_TYPE::GetRootGuardSafe(Context *ctx) -> WritePageGuard {
 }
 
 INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::SetRoot(page_id_t new_root_id, Context *ctx) {
+    WritePageGuard header_guard = std::move(ctx->write_set_.back().first);
+    auto header_page = header_guard.AsMut<BPlusTreeHeaderPage>();
+    header_page->root_page_id_ = new_root_id;
+
+    this->bpm_->UnpinPage(ctx->root_page_id_, true);
+    ctx->root_page_id_ = new_root_id;
+}
+
+INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::MakeNewRoot(bool as_leaf, Context *ctx) -> WritePageGuard {
   // set new root id in the header page
-  WritePageGuard header_guard = this->bpm_->FetchPageWrite(this->header_page_id_);
+  WritePageGuard header_guard = std::move(ctx->write_set_.back().first);
+  ctx->write_set_.pop_back();
   auto header_page = header_guard.AsMut<BPlusTreeHeaderPage>();
+  ctx->write_set_.emplace_back(std::move(header_guard), header_page_id_);
   if (as_leaf && header_page->root_page_id_ != INVALID_PAGE_ID) {
     // Between when a thread saw that the tree was empty and called MakeNewRoot
     // another thread already created a new root
@@ -354,8 +366,7 @@ auto BPLUSTREE_TYPE::SplitInternalNode(InternalPage *old_internal, page_id_t old
 
   // Truncate the old internal node
   old_internal->SetSize(old_internal->GetMinSize());
-  bool internal_is_root = (this->GetRootPageId() == old_internal_id);
-  if (internal_is_root) {
+  if (ctx->IsRootPage(old_internal_id)) {
     // Make root as internal node
     WritePageGuard root = this->MakeNewRoot(false, ctx);
     auto root_page = root.AsMut<InternalPage>();
@@ -398,8 +409,7 @@ auto BPLUSTREE_TYPE::SplitLeafNode(LeafPage *old_leaf, page_id_t old_leaf_id, Co
   old_leaf->SetNextPageId(new_leaf_id);
   // Truncate existing entries from the node
   old_leaf->SetSize(old_leaf->GetMinSize());
-  bool leaf_is_root = (this->GetRootPageId() == old_leaf_id);
-  if (leaf_is_root) {
+  if (ctx->IsRootPage(old_leaf_id)) {
     // Make root as internal node
     WritePageGuard root = this->MakeNewRoot(false, ctx);
     auto root_page = root.AsMut<InternalPage>();
@@ -542,17 +552,32 @@ void BPLUSTREE_TYPE::MergeNodes(BPlusTreePage *left_page, page_id_t left_page_id
   } else {
     BUSTUB_ASSERT(!right_page->IsLeafPage(), "Merging leaf node with a non-leaf node");
     auto left_page_as_internal = reinterpret_cast<InternalPage *>(left_page);
+    auto initial_left_page_size = left_page_as_internal->GetSize();
+
     auto right_page_as_internal = reinterpret_cast<InternalPage *>(right_page);
+    auto right_page_left_child_id = right_page_as_internal->ValueAt(0);
+    BasicPageGuard right_page_left_child_guard = this->bpm_->FetchPageBasic(right_page_left_child_id);
+    auto right_page_left_child = right_page_left_child_guard.As<BPlusTreePage>();
+
     std::vector<std::pair<KeyType, page_id_t>> tmp;
     for (int i = 0; i < right_page->GetSize(); i++) {
       tmp.emplace_back(right_page_as_internal->KeyAt(i), right_page_as_internal->ValueAt(i));
     }
     this->AppendEntriesInInternal(left_page_as_internal, left_page_id, tmp, nullptr);
+    left_page_as_internal->SetKeyAt(initial_left_page_size, this->GetSmallestKeyInSubTree(right_page_left_child));
+
 
     auto delete_index = this->GetInternalIndexForValue(parent_page, right_page_id);
     auto delete_key = parent_page->KeyAt(delete_index);
     right_page_as_internal->SetSize(0);
     this->RemoveEntryInInternal(parent_page, parent_page_id, delete_key, ctx);
+  }
+
+  // The right page no longer part of the tree, so we alert the bpm
+  this->bpm_->UnpinPage(right_page_id, true);
+
+  if(ctx->IsRootPage(parent_page_id) && parent_page->GetSize() == 1) {
+      this->SetRoot(left_page_id, ctx);
   }
 }
 
@@ -611,6 +636,7 @@ void BPLUSTREE_TYPE::RightShift(BPlusTreePage *left_page, page_id_t left_pid, BP
     this->RemoveEntryInInternal(left_page_as_internal, left_pid, last_left_key, nullptr);
   }
 }
+
 
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::CoalescesNode(BPlusTreePage *page, page_id_t page_id, const KeyType &key, Context *ctx) {
@@ -696,9 +722,8 @@ auto BPLUSTREE_TYPE::RemoveEntryInInternal(InternalPage *page, page_id_t page_id
     return true;
   }
 
-  // TODO(mprashker) Think about the case we are removing from the root
   if (!ctx->IsRootPage(page_id) && this->InternalPageTooSmall(page)) {
-    this->CoalescesNode(page, page_id, key, ctx);
+      this->CoalescesNode(page, page_id, key, ctx);
   }
   return true;
 }
