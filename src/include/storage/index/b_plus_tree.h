@@ -122,6 +122,9 @@ class BPlusTree {
 
   void CoalescesNode(BPlusTreePage *page, page_id_t page_id, const KeyType &key, Context *ctx);
 
+  void MergeNodes(BPlusTreePage *left_page, page_id_t left_page_id, BPlusTreePage *right_page, page_id_t right_page_id,
+                  InternalPage *parent_page, page_id_t parent_page_id, Context *ctx);
+
   void LeftShift(BPlusTreePage *left_page, page_id_t left_pid, BPlusTreePage *right_page, page_id_t right_pid,
                  InternalPage *parent_page);
 

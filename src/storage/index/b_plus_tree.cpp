@@ -39,10 +39,12 @@ auto BPLUSTREE_TYPE::IsEmpty() const -> bool {
 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetInternalIndexForValue(const InternalPage *page, page_id_t value) const -> int {
-    for(int i = 0; i < page->GetSize(); i++) {
-        if(page->ValueAt(i) == value) {return i;}
+  for (int i = 0; i < page->GetSize(); i++) {
+    if (page->ValueAt(i) == value) {
+      return i;
     }
-    return -1;
+  }
+  return -1;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -275,10 +277,10 @@ auto BPLUSTREE_TYPE::AppendEntriesInLeaf(LeafPage *page, page_id_t page_id,
                                          const std::vector<std::pair<KeyType, ValueType>> &kvs, Context *ctx) {
   BUSTUB_ASSERT(page->GetSize() + int(kvs.size()) <= page->GetMaxSize(), "Appending too many entries to Leaf node");
   int initial_size = page->GetSize();
+  page->IncreaseSize(kvs.size());
   for (size_t i = 0; i < kvs.size(); i++) {
     page->SetKeyAndValueAt(initial_size + i, kvs[i].first, kvs[i].second);
   }
-  page->IncreaseSize(kvs.size());
 }
 
 // TODO(mprashker): Replace with binary search
@@ -318,10 +320,10 @@ auto BPLUSTREE_TYPE::AppendEntriesInInternal(InternalPage *page, page_id_t page_
                                              const std::vector<std::pair<KeyType, page_id_t>> &kvs, Context *ctx) {
   BUSTUB_ASSERT(page->GetSize() + (int)kvs.size() <= page->GetMaxSize(), "Appending too many entries to Internal node");
   int initial_size = page->GetSize();
+  page->IncreaseSize(kvs.size());
   for (size_t i = 0; i < kvs.size(); i++) {
     page->SetKeyAndValueAt(initial_size + i, kvs[i].first, kvs[i].second);
   }
-  page->IncreaseSize(kvs.size());
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -518,13 +520,49 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
  * REMOVE
  *****************************************************************************/
 
+INDEX_TEMPLATE_ARGUMENTS
+void BPLUSTREE_TYPE::MergeNodes(BPlusTreePage *left_page, page_id_t left_page_id, BPlusTreePage *right_page,
+                                page_id_t right_page_id, InternalPage *parent_page, page_id_t parent_page_id,
+                                Context *ctx) {
+  if (left_page->IsLeafPage()) {
+    BUSTUB_ASSERT(right_page->IsLeafPage(), "Merging non-leaf node with a leaf node");
+    auto left_page_as_leaf = reinterpret_cast<LeafPage *>(left_page);
+    auto right_page_as_leaf = reinterpret_cast<LeafPage *>(right_page);
+    std::vector<std::pair<KeyType, ValueType>> tmp;
+    for (int i = 0; i < right_page->GetSize(); i++) {
+      tmp.emplace_back(right_page_as_leaf->KeyAt(i), right_page_as_leaf->ValueAt(i));
+    }
+    this->AppendEntriesInLeaf(left_page_as_leaf, left_page_id, tmp, nullptr);
+    std::cout << left_page_as_leaf->ToString() << "\n";
+    auto delete_index = this->GetInternalIndexForValue(parent_page, right_page_id);
+    auto delete_key = parent_page->KeyAt(delete_index);
+    right_page_as_leaf->SetSize(0);
+    this->RemoveEntryInInternal(parent_page, parent_page_id, delete_key, ctx);
+
+  } else {
+    BUSTUB_ASSERT(!right_page->IsLeafPage(), "Merging leaf node with a non-leaf node");
+    auto left_page_as_internal = reinterpret_cast<InternalPage *>(left_page);
+    auto right_page_as_internal = reinterpret_cast<InternalPage *>(right_page);
+    std::vector<std::pair<KeyType, page_id_t>> tmp;
+    for (int i = 0; i < right_page->GetSize(); i++) {
+      tmp.emplace_back(right_page_as_internal->KeyAt(i), right_page_as_internal->ValueAt(i));
+    }
+    this->AppendEntriesInInternal(left_page_as_internal, left_page_id, tmp, nullptr);
+
+    auto delete_index = this->GetInternalIndexForValue(parent_page, right_page_id);
+    auto delete_key = parent_page->KeyAt(delete_index);
+    right_page_as_internal->SetSize(0);
+    this->RemoveEntryInInternal(parent_page, parent_page_id, delete_key, ctx);
+  }
+}
+
 // Move first entry of right page into last entry of left page
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::LeftShift(BPlusTreePage *left_page, page_id_t left_pid, BPlusTreePage *right_page,
                                page_id_t right_pid, InternalPage *parent_page) {
-    int right_page_index_in_parent = this->GetInternalIndexForValue(parent_page, right_pid);
+  int right_page_index_in_parent = this->GetInternalIndexForValue(parent_page, right_pid);
   if (right_page->IsLeafPage()) {
-    BUSTUB_ASSERT(left_page->IsLeafPage(), "Merging non-leaf left page with leaf right page");
+    BUSTUB_ASSERT(left_page->IsLeafPage(), "Left shifting non-leaf left page with leaf right page");
     auto right_page_as_leaf = reinterpret_cast<LeafPage *>(right_page);
     auto left_page_as_leaf = reinterpret_cast<LeafPage *>(left_page);
 
@@ -549,12 +587,16 @@ void BPLUSTREE_TYPE::LeftShift(BPlusTreePage *left_page, page_id_t left_pid, BPl
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::RightShift(BPlusTreePage *left_page, page_id_t left_pid, BPlusTreePage *right_page,
                                 page_id_t right_pid, InternalPage *parent_page) {
+  int right_page_index_in_parent = this->GetInternalIndexForValue(parent_page, right_pid);
+
   if (left_page->IsLeafPage()) {
-    BUSTUB_ASSERT(right_page->IsLeafPage(), "Merging non-leaf right page with leaf left page");
+    BUSTUB_ASSERT(right_page->IsLeafPage(), "Right shifting non-leaf right page with leaf left page");
     auto left_page_as_leaf = reinterpret_cast<LeafPage *>(left_page);
     auto right_page_as_leaf = reinterpret_cast<LeafPage *>(right_page);
     auto last_left_key = left_page_as_leaf->KeyAt(left_page_as_leaf->GetSize() - 1);
     auto last_left_value = left_page_as_leaf->ValueAt(left_page_as_leaf->GetSize() - 1);
+
+    parent_page->SetKeyAt(right_page_index_in_parent, last_left_key);
     this->InsertEntryInLeaf(right_page_as_leaf, right_pid, last_left_key, last_left_value, nullptr);
     this->RemoveEntryInLeaf(left_page_as_leaf, left_pid, last_left_key, nullptr);
   } else {
@@ -562,11 +604,12 @@ void BPLUSTREE_TYPE::RightShift(BPlusTreePage *left_page, page_id_t left_pid, BP
     auto right_page_as_internal = reinterpret_cast<InternalPage *>(right_page);
     auto last_left_key = left_page_as_internal->KeyAt(left_page_as_internal->GetSize() - 1);
     auto last_left_value = left_page_as_internal->ValueAt(left_page_as_internal->GetSize() - 1);
+
     right_page_as_internal->SetValueAt(0, last_left_value);
+    parent_page->SetKeyAt(right_page_index_in_parent, last_left_key);
+    this->InsertEntryInInternal(right_page_as_internal, right_pid, last_left_key, last_left_value, nullptr);
     this->RemoveEntryInInternal(left_page_as_internal, left_pid, last_left_key, nullptr);
   }
-
-    //TODO(mprashker) Need to update entry in parent page
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -613,66 +656,11 @@ void BPLUSTREE_TYPE::CoalescesNode(BPlusTreePage *page, page_id_t page_id, const
 
   // At this point we must merge with a one of our neighbor nodes
   // And we know that either node has small enough size
-  BPlusTreePage *merge_neighbor;
-  page_id_t merge_neighbor_pid;
-  bool merge_on_left = false;
   if (right_neighbor) {
-    merge_neighbor = right_neighbor;
-    merge_neighbor_pid = right_neighbor_pid;
+    return this->MergeNodes(page, page_id, right_neighbor, right_neighbor_pid, parent_page, parent_pid, ctx);
   } else {
-    merge_neighbor = left_neighbor;
-    merge_neighbor_pid = left_neighbor_pid;
-    merge_on_left = true;
+    return this->MergeNodes(left_neighbor, left_neighbor_pid, page, page_id, parent_page, parent_pid, ctx);
   }
-
-  KeyType delete_key;
-  if (merge_neighbor->IsLeafPage()) {
-    auto page_as_leaf = reinterpret_cast<LeafPage *>(page);
-    std::cout << page_as_leaf->ToString() << "\n";
-    auto merge_neighbor_as_leaf = reinterpret_cast<LeafPage *>(merge_neighbor);
-    std::vector<std::pair<KeyType, ValueType>> tmp;
-    if (merge_on_left) {
-      for (int i = 0; i < page_as_leaf->GetSize(); i++) {
-        tmp.emplace_back(page_as_leaf->KeyAt(i), page_as_leaf->ValueAt(i));
-      }
-      this->AppendEntriesInLeaf(merge_neighbor_as_leaf, merge_neighbor_pid, tmp, nullptr);
-      page_as_leaf->SetSize(0);
-      delete_key = parent_page->KeyAt(key_index);
-    } else {
-      for (int i = 0; i < merge_neighbor->GetSize(); i++) {
-        tmp.emplace_back(merge_neighbor_as_leaf->KeyAt(i), merge_neighbor_as_leaf->ValueAt(i));
-      }
-      this->AppendEntriesInLeaf(page_as_leaf, page_id, tmp, nullptr);
-      merge_neighbor->SetSize(0);
-      delete_key = parent_page->KeyAt(key_index + 1);
-    }
-  } else {
-    auto page_as_internal = reinterpret_cast<InternalPage *>(page);
-    auto merge_neighbor_as_internal = reinterpret_cast<InternalPage *>(merge_neighbor);
-    std::vector<std::pair<KeyType, page_id_t>> tmp;
-    if (merge_on_left) {
-      for (int i = 0; i < page_as_internal->GetSize(); i++) {
-        tmp.emplace_back(page_as_internal->KeyAt(i), page_as_internal->ValueAt(i));
-      }
-      this->AppendEntriesInInternal(merge_neighbor_as_internal, merge_neighbor_pid, tmp, nullptr);
-      page_as_internal->SetSize(0);
-      delete_key = parent_page->KeyAt(key_index);
-    } else {
-      for (int i = 0; i < merge_neighbor->GetSize(); i++) {
-        tmp.emplace_back(merge_neighbor_as_internal->KeyAt(i), merge_neighbor_as_internal->ValueAt(i));
-      }
-      this->AppendEntriesInInternal(page_as_internal, page_id, tmp, nullptr);
-      merge_neighbor->SetSize(0);
-      delete_key = parent_page->KeyAt(key_index + 1);
-    }
-  }
-
-  // We now need to delete an entry in parent
-  // Don't forget to unpin the page which is now empty
-  // right_neighbor_guard.Drop();
-  // this->bpm_->UnpinPage(right_neighbor_pid, true);
-  std::cout << "Deleting key " << delete_key << " in parent\n";
-  this->RemoveEntryInInternal(parent_page, parent_pid, delete_key, ctx);
 }
 
 // TODO(mprashker)
@@ -680,12 +668,17 @@ INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::RemoveEntryInInternal(InternalPage *page, page_id_t page_id, const KeyType &key, Context *ctx)
     -> bool {
   int key_index = -1;
-  for (int i = 1; i < page->GetSize(); i++) {
-    if (this->comparator_(page->KeyAt(i), key) == 0) {
-      key_index = i;
-      break;
+  if (this->comparator_(key, page->KeyAt(1)) < 0) {
+    key_index = 1;
+  } else {
+    for (int i = 1; i < page->GetSize(); i++) {
+      if (this->comparator_(page->KeyAt(i), key) == 0) {
+        key_index = i;
+        break;
+      }
     }
   }
+
   if (key_index == -1) {
     // Key not present
     return false;
@@ -698,6 +691,7 @@ auto BPLUSTREE_TYPE::RemoveEntryInInternal(InternalPage *page, page_id_t page_id
     page->SetKeyAndValueAt(key_index + i, suffix[i].first, suffix[i].second);
   }
   page->IncreaseSize(-1);
+
   if (ctx == nullptr) {
     return true;
   }
