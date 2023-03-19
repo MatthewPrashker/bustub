@@ -15,7 +15,7 @@ INDEX_TEMPLATE_ARGUMENTS
 INDEXITERATOR_TYPE::IndexIterator() : page_(nullptr), page_id_(INVALID_PAGE_ID), index_in_page_(0) {}
 
 INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE::~IndexIterator() {}
+INDEXITERATOR_TYPE::~IndexIterator() = default;
 
 INDEX_TEMPLATE_ARGUMENTS
 auto INDEXITERATOR_TYPE::IsEnd() -> bool { return this->page_ == nullptr; }
@@ -34,18 +34,18 @@ auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
   this->index_in_page_++;
   if (this->index_in_page_ < this->page_->GetSize()) {
     return *this;
-  } else {
-    page_id_t next_page_index = this->page_->GetNextPageId();
-    if (next_page_index != INVALID_PAGE_ID) {
-      BasicPageGuard next_guard = this->bpm_->FetchPageBasic(next_page_index);
-      auto next_page = next_guard.As<LeafPage>();
-      this->page_ = next_page;
-      this->page_id_ = next_page_index;
-      this->index_in_page_ = 0;
-    } else {
-      this->page_ = nullptr;
-    }
   }
+  page_id_t next_page_index = this->page_->GetNextPageId();
+  if (next_page_index != INVALID_PAGE_ID) {
+    BasicPageGuard next_guard = this->bpm_->FetchPageBasic(next_page_index);
+    auto next_page = next_guard.As<LeafPage>();
+    this->page_ = next_page;
+    this->page_id_ = next_page_index;
+    this->index_in_page_ = 0;
+  } else {
+    this->page_ = nullptr;
+  }
+
   return *this;
 }
 

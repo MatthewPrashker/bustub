@@ -301,7 +301,8 @@ auto BPLUSTREE_TYPE::InsertEntryInLeaf(LeafPage *page, page_id_t page_id, const 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::AppendEntriesInLeaf(LeafPage *page, page_id_t page_id,
                                          const std::vector<std::pair<KeyType, ValueType>> &kvs, Context *ctx) {
-  BUSTUB_ASSERT(page->GetSize() + int(kvs.size()) <= page->GetMaxSize(), "Appending too many entries to Leaf node");
+  BUSTUB_ASSERT(page->GetSize() + static_cast<int>(kvs.size()) <= page->GetMaxSize(),
+                "Appending too many entries to Leaf node");
   int initial_size = page->GetSize();
   page->IncreaseSize(kvs.size());
   for (size_t i = 0; i < kvs.size(); i++) {
@@ -458,7 +459,6 @@ auto BPLUSTREE_TYPE::InsertOptimistic(const KeyType &key, const ValueType &value
   ctx.root_page_id_ = header_page->root_page_id_;
   ctx.read_set_.push_back(std::move(header_guard));
 
-
   while (!cur_page->IsLeafPage()) {
     auto internal_page = reinterpret_cast<const InternalPage *>(cur_page);
     if (!InternalCanAbsorbInsert(internal_page)) {
@@ -498,10 +498,10 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   std::cout << "Inserting key " << key << "\n";
 
   // Try optimistic insert first
-    auto optimistic_ret = this->InsertOptimistic(key, value, txn);
-    if (optimistic_ret.first) {
-      return optimistic_ret.second;
-    }
+  auto optimistic_ret = this->InsertOptimistic(key, value, txn);
+  if (optimistic_ret.first) {
+    return optimistic_ret.second;
+  }
 
   Context ctx;
   WritePageGuard cur_guard = this->GetRootGuardSafe(&ctx);
@@ -550,9 +550,9 @@ void BPLUSTREE_TYPE::MergeNodes(BPlusTreePage *left_page, page_id_t left_page_id
     BUSTUB_ASSERT(right_page->IsLeafPage(), "Merging non-leaf node with a leaf node");
     auto left_page_as_leaf = reinterpret_cast<LeafPage *>(left_page);
     auto right_page_as_leaf = reinterpret_cast<LeafPage *>(right_page);
-    std::vector<std::pair<KeyType, ValueType>> tmp;
+    std::vector<std::pair<KeyType, ValueType>> tmp(right_page->GetSize());
     for (int i = 0; i < right_page->GetSize(); i++) {
-      tmp.emplace_back(right_page_as_leaf->KeyAt(i), right_page_as_leaf->ValueAt(i));
+      tmp[i] = {right_page_as_leaf->KeyAt(i), right_page_as_leaf->ValueAt(i)};
     }
     this->AppendEntriesInLeaf(left_page_as_leaf, left_page_id, tmp, nullptr);
     left_page_as_leaf->SetNextPageId(right_page_id);
@@ -573,9 +573,9 @@ void BPLUSTREE_TYPE::MergeNodes(BPlusTreePage *left_page, page_id_t left_page_id
     BasicPageGuard right_page_left_child_guard = this->bpm_->FetchPageBasic(right_page_left_child_id);
     auto right_page_left_child = right_page_left_child_guard.As<BPlusTreePage>();
 
-    std::vector<std::pair<KeyType, page_id_t>> tmp;
+    std::vector<std::pair<KeyType, page_id_t>> tmp(right_page->GetSize());
     for (int i = 0; i < right_page->GetSize(); i++) {
-      tmp.emplace_back(right_page_as_internal->KeyAt(i), right_page_as_internal->ValueAt(i));
+      tmp[i] = {right_page_as_internal->KeyAt(i), right_page_as_internal->ValueAt(i)};
     }
     this->AppendEntriesInInternal(left_page_as_internal, left_page_id, tmp, nullptr);
     left_page_as_internal->SetKeyAt(initial_left_page_size, this->GetSmallestKeyInSubTree(right_page_left_child));
@@ -666,9 +666,9 @@ void BPLUSTREE_TYPE::CoalescesNode(BPlusTreePage *page, page_id_t page_id, const
   WritePageGuard left_neighbor_guard;
 
   LeafPage *right_neighbor = nullptr;
-  page_id_t right_neighbor_pid;
+  page_id_t right_neighbor_pid = INVALID_PAGE_ID;
   LeafPage *left_neighbor = nullptr;
-  page_id_t left_neighbor_pid;
+  page_id_t left_neighbor_pid = INVALID_PAGE_ID;
 
   if (!key_at_end) {
     right_neighbor_pid = parent_page->ValueAt(key_index + 1);
@@ -696,9 +696,8 @@ void BPLUSTREE_TYPE::CoalescesNode(BPlusTreePage *page, page_id_t page_id, const
   // And we know that either node has small enough size
   if (right_neighbor) {
     return this->MergeNodes(page, page_id, right_neighbor, right_neighbor_pid, parent_page, parent_pid, ctx);
-  } else {
-    return this->MergeNodes(left_neighbor, left_neighbor_pid, page, page_id, parent_page, parent_pid, ctx);
   }
+  return this->MergeNodes(left_neighbor, left_neighbor_pid, page, page_id, parent_page, parent_pid, ctx);
 }
 
 // TODO(mprashker)
