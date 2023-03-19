@@ -90,6 +90,9 @@ void B_PLUS_TREE_LEAF_PAGE_TYPE::SetKeyAndValueAt(int index, const KeyType &key,
   this->SetValueAt(index, val);
 }
 
+INDEX_TEMPLATE_ARGUMENTS
+auto B_PLUS_TREE_LEAF_PAGE_TYPE::GetDataRef() const -> const std::pair<KeyType, ValueType> * { return (this->array_); }
+
 template class BPlusTreeLeafPage<GenericKey<4>, RID, GenericComparator<4>>;
 template class BPlusTreeLeafPage<GenericKey<8>, RID, GenericComparator<8>>;
 template class BPlusTreeLeafPage<GenericKey<16>, RID, GenericComparator<16>>;

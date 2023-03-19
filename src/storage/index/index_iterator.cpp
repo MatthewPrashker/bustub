@@ -12,19 +12,45 @@ namespace bustub {
  * set your own input parameters
  */
 INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE::IndexIterator() = default;
+INDEXITERATOR_TYPE::IndexIterator() : page_(nullptr), page_id_(INVALID_PAGE_ID), index_in_page_(0) {}
 
 INDEX_TEMPLATE_ARGUMENTS
-INDEXITERATOR_TYPE::~IndexIterator() = default;  // NOLINT
+INDEXITERATOR_TYPE::~IndexIterator() {
+  if (!this->IsEnd()) {
+    this->bpm_->UnpinPage(this->page_id_, false);
+  }
+}
 
 INDEX_TEMPLATE_ARGUMENTS
-auto INDEXITERATOR_TYPE::IsEnd() -> bool { throw std::runtime_error("unimplemented"); }
+auto INDEXITERATOR_TYPE::IsEnd() -> bool {
+  return this->page_->GetNextPageId() == INVALID_PAGE_ID && this->index_in_page_ == this->page_->GetSize();
+}
 
 INDEX_TEMPLATE_ARGUMENTS
-auto INDEXITERATOR_TYPE::operator*() -> const MappingType & { throw std::runtime_error("unimplemented"); }
+auto INDEXITERATOR_TYPE::operator*() -> const MappingType & {
+  auto data = this->page_->GetDataRef();
+  return *(data + this->index_in_page_);
+}
 
 INDEX_TEMPLATE_ARGUMENTS
-auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & { throw std::runtime_error("unimplemented"); }
+auto INDEXITERATOR_TYPE::operator++() -> INDEXITERATOR_TYPE & {
+  if (this->IsEnd()) {
+    return *this;
+  }
+  this->index_in_page_++;
+  if (this->index_in_page_ < this->page_->GetSize()) {
+    return *this;
+  } else {
+    page_id_t next_page_index = this->page_->GetNextPageId();
+    this->bpm_->UnpinPage(this->page_id_, false);
+    if (next_page_index != INVALID_PAGE_ID) {
+      this->page_ = reinterpret_cast<LeafPage *>(this->bpm_->FetchPage(next_page_index));
+      this->page_id_ = next_page_index;
+      this->index_in_page_ = 0;
+    }
+  }
+  return *this;
+}
 
 template class IndexIterator<GenericKey<4>, RID, GenericComparator<4>>;
 

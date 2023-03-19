@@ -211,12 +211,12 @@ auto BPLUSTREE_TYPE::GetRootGuardSafe(Context *ctx) -> WritePageGuard {
 
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::SetRoot(page_id_t new_root_id, Context *ctx) {
-    WritePageGuard header_guard = std::move(ctx->write_set_.back().first);
-    auto header_page = header_guard.AsMut<BPlusTreeHeaderPage>();
-    header_page->root_page_id_ = new_root_id;
+  WritePageGuard header_guard = std::move(ctx->write_set_.back().first);
+  auto header_page = header_guard.AsMut<BPlusTreeHeaderPage>();
+  header_page->root_page_id_ = new_root_id;
 
-    this->bpm_->UnpinPage(ctx->root_page_id_, true);
-    ctx->root_page_id_ = new_root_id;
+  this->bpm_->UnpinPage(ctx->root_page_id_, true);
+  ctx->root_page_id_ = new_root_id;
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -543,6 +543,8 @@ void BPLUSTREE_TYPE::MergeNodes(BPlusTreePage *left_page, page_id_t left_page_id
       tmp.emplace_back(right_page_as_leaf->KeyAt(i), right_page_as_leaf->ValueAt(i));
     }
     this->AppendEntriesInLeaf(left_page_as_leaf, left_page_id, tmp, nullptr);
+    left_page_as_leaf->SetNextPageId(right_page_id);
+
     std::cout << left_page_as_leaf->ToString() << "\n";
     auto delete_index = this->GetInternalIndexForValue(parent_page, right_page_id);
     auto delete_key = parent_page->KeyAt(delete_index);
@@ -566,7 +568,6 @@ void BPLUSTREE_TYPE::MergeNodes(BPlusTreePage *left_page, page_id_t left_page_id
     this->AppendEntriesInInternal(left_page_as_internal, left_page_id, tmp, nullptr);
     left_page_as_internal->SetKeyAt(initial_left_page_size, this->GetSmallestKeyInSubTree(right_page_left_child));
 
-
     auto delete_index = this->GetInternalIndexForValue(parent_page, right_page_id);
     auto delete_key = parent_page->KeyAt(delete_index);
     right_page_as_internal->SetSize(0);
@@ -576,8 +577,8 @@ void BPLUSTREE_TYPE::MergeNodes(BPlusTreePage *left_page, page_id_t left_page_id
   // The right page no longer part of the tree, so we alert the bpm
   this->bpm_->UnpinPage(right_page_id, true);
 
-  if(ctx->IsRootPage(parent_page_id) && parent_page->GetSize() == 1) {
-      this->SetRoot(left_page_id, ctx);
+  if (ctx->IsRootPage(parent_page_id) && parent_page->GetSize() == 1) {
+    this->SetRoot(left_page_id, ctx);
   }
 }
 
@@ -636,7 +637,6 @@ void BPLUSTREE_TYPE::RightShift(BPlusTreePage *left_page, page_id_t left_pid, BP
     this->RemoveEntryInInternal(left_page_as_internal, left_pid, last_left_key, nullptr);
   }
 }
-
 
 INDEX_TEMPLATE_ARGUMENTS
 void BPLUSTREE_TYPE::CoalescesNode(BPlusTreePage *page, page_id_t page_id, const KeyType &key, Context *ctx) {
@@ -723,7 +723,7 @@ auto BPLUSTREE_TYPE::RemoveEntryInInternal(InternalPage *page, page_id_t page_id
   }
 
   if (!ctx->IsRootPage(page_id) && this->InternalPageTooSmall(page)) {
-      this->CoalescesNode(page, page_id, key, ctx);
+    this->CoalescesNode(page, page_id, key, ctx);
   }
   return true;
 }
@@ -819,7 +819,20 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
  * @return : index iterator
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE(); }
+auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
+  int header_id = this->header_page_id_;
+  auto cur_page = reinterpret_cast<BPlusTreePage *>(this->bpm_->FetchPage(header_id));
+  page_id_t cur_id = header_id;
+
+  while (!cur_page->IsLeafPage()) {
+    auto cur_page_as_internal = reinterpret_cast<InternalPage *>(cur_page);
+    page_id_t leftmost_page_id = cur_page_as_internal->ValueAt(0);
+    cur_page = reinterpret_cast<BPlusTreePage *>(this->bpm_->FetchPage(leftmost_page_id));
+    cur_id = leftmost_page_id;
+  }
+  auto cur_page_as_leaf = reinterpret_cast<LeafPage *>(cur_page);
+  return INDEXITERATOR_TYPE(cur_page_as_leaf, cur_id, 0, this->bpm_);
+}
 
 /*
  * Input parameter is low key, find the leaf page that contains the input key
@@ -827,7 +840,11 @@ auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE()
  * @return : index iterator
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE(); }
+auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
+  ReadPageGuard leaf_guard = this->LeafContainingKey(key);
+  throw std::runtime_error("unimplemented")
+  //return INDEXITERATOR_TYPE();
+}
 
 /*
  * Input parameter is void, construct an index iterator representing the end
@@ -835,7 +852,7 @@ auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE { return IN
  * @return : index iterator
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE(); }
+auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE(nullptr, INVALID_PAGE_ID, 0, this->bpm_); }
 
 /**
  * @return Page id of the root of this tree

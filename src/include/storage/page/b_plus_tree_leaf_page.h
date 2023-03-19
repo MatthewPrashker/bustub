@@ -56,6 +56,8 @@ class BPlusTreeLeafPage : public BPlusTreePage {
 
   auto IndexInRange(int index) const -> bool;
 
+  auto GetDataRef() const -> const MappingType *;
+
   // helper methods
   auto GetNextPageId() const -> page_id_t;
   void SetNextPageId(page_id_t next_page_id);
