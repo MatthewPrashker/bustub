@@ -87,14 +87,13 @@ auto BPLUSTREE_TYPE::GetChildPage(const InternalPage *page, const KeyType &key) 
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::FindValueInLeaf(const LeafPage *page, const KeyType &key, std::vector<ValueType> *result) const
     -> bool {
-  bool found = false;
   for (int i = 0; i < page->GetSize(); i++) {
     if (this->comparator_(page->KeyAt(i), key) == 0) {
-      found = true;
       result->push_back(page->ValueAt(i));
+      return true;
     }
   }
-  return found;
+  return false;
 }
 
 /*
@@ -160,6 +159,7 @@ auto BPLUSTREE_TYPE::LeafContainingKey(const KeyType &key) const -> ReadPageGuar
     cur_guard = this->bpm_->FetchPageRead(child_pid);
     cur_page = cur_guard.As<BPlusTreePage>();
   }
+  ctx.UnlockReadSet();
   return cur_guard;
 }
 
@@ -230,6 +230,7 @@ void BPLUSTREE_TYPE::SetRoot(page_id_t new_root_id, Context *ctx) {
 
   this->bpm_->UnpinPage(ctx->root_page_id_, true);
   ctx->root_page_id_ = new_root_id;
+  ctx->write_set_.emplace_back(std::move(header_guard), this->header_page_id_);
 }
 
 INDEX_TEMPLATE_ARGUMENTS
@@ -502,10 +503,10 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   std::cout << "Inserting key " << key << "\n";
 
   // Try optimistic insert first
-  // auto optimistic_ret = this->InsertOptimistic(key, value, txn);
-  // if (optimistic_ret.first) {
-  // return optimistic_ret.second;
-  //}
+  auto optimistic_ret = this->InsertOptimistic(key, value, txn);
+  if (optimistic_ret.first) {
+    return optimistic_ret.second;
+  }
 
   Context ctx;
   WritePageGuard cur_guard = this->GetRootGuardSafe(&ctx);
@@ -536,7 +537,10 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
     // we release all write locks above this node
     ctx.UnlockWriteSet();
   }
-  return this->InsertEntryInLeaf(leaf_page, cur_pid, key, value, &ctx);
+  auto ret = this->InsertEntryInLeaf(leaf_page, cur_pid, key, value, &ctx);
+
+  ctx.UnlockWriteSet();
+  return ret;
 }
 
 /*****************************************************************************
@@ -821,6 +825,7 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
     ctx.UnlockWriteSet();
   }
   this->RemoveEntryInLeaf(leaf_page, cur_pid, key, &ctx);
+  ctx.UnlockWriteSet();
 }
 
 /*****************************************************************************
@@ -886,13 +891,13 @@ auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE {
-    page_id_t header_id = this->header_page_id_;
-    BasicPageGuard header_guard = this->bpm_->FetchPageBasic(header_id);
-    auto header_page = header_guard.As<BPlusTreeHeaderPage>();
+  page_id_t header_id = this->header_page_id_;
+  BasicPageGuard header_guard = this->bpm_->FetchPageBasic(header_id);
+  auto header_page = header_guard.As<BPlusTreeHeaderPage>();
 
-    BasicPageGuard root_guard = this->bpm_->FetchPageBasic(header_page->root_page_id_);
-    auto root_page = root_guard.As<BPlusTreePage>();
-    return ++this->Begin(this->GetLargestKeyInSubTree(root_page));
+  BasicPageGuard root_guard = this->bpm_->FetchPageBasic(header_page->root_page_id_);
+  auto root_page = root_guard.As<BPlusTreePage>();
+  return ++this->Begin(this->GetLargestKeyInSubTree(root_page));
 }
 
 /**
@@ -900,7 +905,7 @@ auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::GetRootPageId() const -> page_id_t {
-  ReadPageGuard guard = this->bpm_->FetchPageRead(header_page_id_);
+  ReadPageGuard guard = this->bpm_->FetchPageRead(this->header_page_id_);
   auto header_page = guard.As<BPlusTreeHeaderPage>();
   return header_page->root_page_id_;
 }

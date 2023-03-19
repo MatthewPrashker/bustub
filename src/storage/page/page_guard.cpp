@@ -62,7 +62,7 @@ void ReadPageGuard::Drop() {
 
   this->guard_.bpm_->UnpinPage(this->guard_.page_->GetPageId(), this->guard_.is_dirty_);
   this->guard_.bpm_ = nullptr;
-  this->guard_.page_->WUnlatch();
+  this->guard_.page_->RUnlatch();
   this->guard_.page_ = nullptr;
 }
 

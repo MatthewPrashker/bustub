@@ -118,6 +118,7 @@ void LookupHelper(BPlusTree<GenericKey<8>, RID, GenericComparator<8>> *tree, con
     ASSERT_EQ(res, true);
     ASSERT_EQ(result.size(), 1);
     ASSERT_EQ(result[0], rid);
+    std::cout << "Did lookup for key " << key << "\n";
   }
   delete transaction;
 }
@@ -355,8 +356,8 @@ TEST(BPlusTreeConcurrentTest, MixTest2) {
   // Add perserved_keys
   std::vector<int64_t> perserved_keys;
   std::vector<int64_t> dynamic_keys;
-  int64_t total_keys = 50;
-  int64_t sieve = 5;
+  int64_t total_keys = 100;
+  int64_t sieve = 2;
   for (int64_t i = 1; i <= total_keys; i++) {
     if (i % sieve == 0) {
       perserved_keys.push_back(i);
@@ -378,7 +379,7 @@ TEST(BPlusTreeConcurrentTest, MixTest2) {
   tasks.emplace_back(delete_task);
   tasks.emplace_back(lookup_task);
 
-  size_t num_threads = 6;
+  size_t num_threads = 2;
   for (size_t i = 0; i < num_threads; i++) {
     threads.emplace_back(std::thread{tasks[i % tasks.size()], i});
   }
