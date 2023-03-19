@@ -125,6 +125,19 @@ auto BPLUSTREE_TYPE::GetSmallestKeyInSubTree(const BPlusTreePage *page) const ->
 }
 
 INDEX_TEMPLATE_ARGUMENTS
+auto BPLUSTREE_TYPE::GetLargestKeyInSubTree(const BPlusTreePage *page) const -> KeyType {
+  if (page->IsLeafPage()) {
+    auto page_as_leaf = reinterpret_cast<const LeafPage *>(page);
+    return page_as_leaf->KeyAt(page_as_leaf->GetSize() - 1);
+  }
+  auto page_as_internal = reinterpret_cast<const InternalPage *>(page);
+  ReadPageGuard rightmost_page_guard =
+      this->bpm_->FetchPageRead(page_as_internal->ValueAt(page_as_internal->GetSize() - 1));
+  auto rightmost_page = rightmost_page_guard.As<BPlusTreePage>();
+  return this->GetLargestKeyInSubTree(rightmost_page);
+}
+
+INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::LeafContainingKey(const KeyType &key) const -> ReadPageGuard {
   Context ctx;
   ReadPageGuard header_guard = this->bpm_->FetchPageRead(this->header_page_id_);
@@ -489,10 +502,10 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   std::cout << "Inserting key " << key << "\n";
 
   // Try optimistic insert first
-  auto optimistic_ret = this->InsertOptimistic(key, value, txn);
-  if (optimistic_ret.first) {
-    return optimistic_ret.second;
-  }
+  // auto optimistic_ret = this->InsertOptimistic(key, value, txn);
+  // if (optimistic_ret.first) {
+  // return optimistic_ret.second;
+  //}
 
   Context ctx;
   WritePageGuard cur_guard = this->GetRootGuardSafe(&ctx);
@@ -820,18 +833,13 @@ void BPLUSTREE_TYPE::Remove(const KeyType &key, Transaction *txn) {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
-  int header_id = this->header_page_id_;
-  auto cur_page = reinterpret_cast<BPlusTreePage *>(this->bpm_->FetchPage(header_id));
-  page_id_t cur_id = header_id;
+  page_id_t header_id = this->header_page_id_;
+  BasicPageGuard header_guard = this->bpm_->FetchPageBasic(header_id);
+  auto header_page = header_guard.As<BPlusTreeHeaderPage>();
 
-  while (!cur_page->IsLeafPage()) {
-    auto cur_page_as_internal = reinterpret_cast<InternalPage *>(cur_page);
-    page_id_t leftmost_page_id = cur_page_as_internal->ValueAt(0);
-    cur_page = reinterpret_cast<BPlusTreePage *>(this->bpm_->FetchPage(leftmost_page_id));
-    cur_id = leftmost_page_id;
-  }
-  auto cur_page_as_leaf = reinterpret_cast<LeafPage *>(cur_page);
-  return INDEXITERATOR_TYPE(cur_page_as_leaf, cur_id, 0, this->bpm_);
+  BasicPageGuard root_guard = this->bpm_->FetchPageBasic(header_page->root_page_id_);
+  auto root_page = root_guard.As<BPlusTreePage>();
+  return this->Begin(this->GetSmallestKeyInSubTree(root_page));
 }
 
 /*
@@ -841,9 +849,34 @@ auto BPLUSTREE_TYPE::Begin() -> INDEXITERATOR_TYPE {
  */
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
-  ReadPageGuard leaf_guard = this->LeafContainingKey(key);
-  throw std::runtime_error("unimplemented")
-  //return INDEXITERATOR_TYPE();
+  page_id_t header_id = this->header_page_id_;
+  BasicPageGuard header_guard = this->bpm_->FetchPageBasic(header_id);
+  auto header_page = header_guard.As<BPlusTreeHeaderPage>();
+  page_id_t root_id = header_page->root_page_id_;
+
+  BasicPageGuard cur_guard = this->bpm_->FetchPageBasic(root_id);
+  auto cur_page = cur_guard.As<BPlusTreePage>();
+  page_id_t cur_pid = root_id;
+
+  while (!cur_page->IsLeafPage()) {
+    auto cur_page_as_internal = reinterpret_cast<const InternalPage *>(cur_page);
+    page_id_t child_pid = this->GetChildPage(cur_page_as_internal, key);
+
+    cur_guard = this->bpm_->FetchPageBasic(child_pid);
+    cur_page = cur_guard.As<BPlusTreePage>();
+    cur_pid = child_pid;
+  }
+
+  // TODO(mprashker) replace with binary search
+  int index_in_leaf = 0;
+  auto cur_page_as_leaf = reinterpret_cast<const LeafPage *>(cur_page);
+  while (index_in_leaf < cur_page->GetSize()) {
+    if (this->comparator_(key, cur_page_as_leaf->KeyAt(index_in_leaf)) == 0) {
+      break;
+    }
+    ++index_in_leaf;
+  }
+  return INDEXITERATOR_TYPE(cur_page_as_leaf, cur_pid, index_in_leaf, this->bpm_);
 }
 
 /*
@@ -852,7 +885,15 @@ auto BPLUSTREE_TYPE::Begin(const KeyType &key) -> INDEXITERATOR_TYPE {
  * @return : index iterator
  */
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE { return INDEXITERATOR_TYPE(nullptr, INVALID_PAGE_ID, 0, this->bpm_); }
+auto BPLUSTREE_TYPE::End() -> INDEXITERATOR_TYPE {
+    page_id_t header_id = this->header_page_id_;
+    BasicPageGuard header_guard = this->bpm_->FetchPageBasic(header_id);
+    auto header_page = header_guard.As<BPlusTreeHeaderPage>();
+
+    BasicPageGuard root_guard = this->bpm_->FetchPageBasic(header_page->root_page_id_);
+    auto root_page = root_guard.As<BPlusTreePage>();
+    return ++this->Begin(this->GetLargestKeyInSubTree(root_page));
+}
 
 /**
  * @return Page id of the root of this tree

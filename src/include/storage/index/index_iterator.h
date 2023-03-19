@@ -27,7 +27,7 @@ class IndexIterator {
   // you may define your own constructor based on your member variables
   IndexIterator();
 
-  IndexIterator(LeafPage *page, page_id_t page_id, int index_in_page, BufferPoolManager *bpm)
+  IndexIterator(const LeafPage *page, page_id_t page_id, int index_in_page, BufferPoolManager *bpm)
       : page_(page), page_id_(page_id), index_in_page_(index_in_page), bpm_(bpm) {}
 
   ~IndexIterator();  // NOLINT
@@ -38,13 +38,15 @@ class IndexIterator {
 
   auto operator++() -> IndexIterator &;
 
-  auto operator==(const IndexIterator &itr) const -> bool { throw std::runtime_error("unimplemented"); }
+  auto operator==(const IndexIterator &itr) const -> bool {
+    return this->page_id_ == itr.page_id_ && this->index_in_page_ == itr.index_in_page_;
+  }
 
-  auto operator!=(const IndexIterator &itr) const -> bool { throw std::runtime_error("unimplemented"); }
+  auto operator!=(const IndexIterator &itr) const -> bool { return !(*this == itr); }
 
  private:
   // add your own private member variables here
-  LeafPage *page_;
+  const LeafPage *page_;
   page_id_t page_id_;
   int index_in_page_;
   BufferPoolManager *bpm_;

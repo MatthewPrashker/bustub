@@ -92,6 +92,8 @@ class BPlusTree {
 
   auto GetSmallestKeyInSubTree(const BPlusTreePage *page) const -> KeyType;
 
+  auto GetLargestKeyInSubTree(const BPlusTreePage *page) const -> KeyType;
+
   auto GetRootGuardSafe(Context *ctx) -> WritePageGuard;
 
   auto GetInternalIndexForKey(const InternalPage *page, const KeyType &key) const -> int;
