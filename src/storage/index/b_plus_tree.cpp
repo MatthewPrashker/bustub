@@ -450,37 +450,32 @@ auto BPLUSTREE_TYPE::InsertOptimistic(const KeyType &key, const ValueType &value
     // If the tree is empty, optimistic insert should fail
     return {false, false};
   }
-  BasicPageGuard root_guard = this->bpm_->FetchPageBasic(header_page->root_page_id_);
-  auto root_page = root_guard.As<InternalPage>();
-  if (root_page->IsLeafPage()) {
-    WritePageGuard leaf_guard = this->bpm_->FetchPageWrite(header_page->root_page_id_);
-    auto leaf_page = leaf_guard.AsMut<LeafPage>();
-    if (!this->LeafCanAbsorbInsert(leaf_page)) {
-      return {false, false};
-    }
-    return {true, this->InsertEntryInLeaf(leaf_page, header_page->root_page_id_, key, value, nullptr)};
-  }
+  ReadPageGuard cur_guard = this->bpm_->FetchPageRead(header_page->root_page_id_);
+  auto cur_page = cur_guard.As<BPlusTreePage>();
+  page_id_t cur_pid = header_page->root_page_id_;
+
   Context ctx;
+  ctx.root_page_id_ = header_page->root_page_id_;
   ctx.read_set_.push_back(std::move(header_guard));
 
-  ReadPageGuard cur_guard = this->bpm_->FetchPageRead(this->GetRootPageId());
-  auto cur_page = cur_guard.As<BPlusTreePage>();
-  page_id_t cur_pid = this->GetRootPageId();
 
   while (!cur_page->IsLeafPage()) {
+    auto internal_page = reinterpret_cast<const InternalPage *>(cur_page);
+    if (!InternalCanAbsorbInsert(internal_page)) {
+      return {false, false};
+    }
     ctx.read_set_.push_back(std::move(cur_guard));
     if (ctx.read_set_.size() >= 2) {
       auto guard = std::move(ctx.read_set_.front());
       ctx.read_set_.pop_front();
     }
 
-    auto internal_page = reinterpret_cast<const InternalPage *>(cur_page);
     // Update cur to child
     cur_pid = this->GetChildPage(internal_page, key);
-
     cur_guard = this->bpm_->FetchPageRead(cur_pid);
     cur_page = cur_guard.As<BPlusTreePage>();
   }
+
   cur_guard.Drop();
   WritePageGuard leaf_guard = this->bpm_->FetchPageWrite(cur_pid);
   ctx.UnlockReadSet();
@@ -503,10 +498,10 @@ auto BPLUSTREE_TYPE::Insert(const KeyType &key, const ValueType &value, Transact
   std::cout << "Inserting key " << key << "\n";
 
   // Try optimistic insert first
-  auto optimistic_ret = this->InsertOptimistic(key, value, txn);
-  if (optimistic_ret.first) {
-    return optimistic_ret.second;
-  }
+    auto optimistic_ret = this->InsertOptimistic(key, value, txn);
+    if (optimistic_ret.first) {
+      return optimistic_ret.second;
+    }
 
   Context ctx;
   WritePageGuard cur_guard = this->GetRootGuardSafe(&ctx);
