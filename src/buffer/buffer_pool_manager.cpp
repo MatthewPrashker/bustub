@@ -9,7 +9,6 @@
 // Copyright (c) 2015-2021, Carnegie Mellon University Database Group
 //
 //===----------------------------------------------------------------------===//
-
 #include "buffer/buffer_pool_manager.h"
 
 #include "common/exception.h"
@@ -23,6 +22,7 @@ BufferPoolManager::BufferPoolManager(size_t pool_size, DiskManager *disk_manager
     : pool_size_(pool_size), disk_manager_(disk_manager), log_manager_(log_manager) {
   // we allocate a consecutive memory space for the buffer pool
   pages_ = new Page[pool_size_];
+  flush_threshold_ = pool_size_ / 3;
   replacer_ = std::make_unique<LRUKReplacer>(pool_size, replacer_k);
 
   // Initially, every frame is in the free list.
@@ -137,12 +137,22 @@ auto BufferPoolManager::FlushPage(page_id_t page_id) -> bool {
   if (page_it == this->page_table_.end()) {
     return false;
   }
-
-  auto frame_id = page_it->second;
-  auto page = &this->pages_[frame_id];
-  this->disk_manager_->WritePage(page_id, page->data_);
-  page->is_dirty_ = false;
+  this->pending_flush_pages_.push_back(page_id);
+  if (this->pending_flush_pages_.size() > this->flush_threshold_) {
+    this->FlushPageBatch();
+  }
   return true;
+}
+
+void BufferPoolManager::FlushPageBatch() {
+  for (page_id_t flush_page : this->pending_flush_pages_) {
+    auto page_it = this->page_table_.find(flush_page);
+    auto frame_id = page_it->second;
+    auto page = &this->pages_[frame_id];
+    this->disk_manager_->WritePage(flush_page, page->data_);
+    page->is_dirty_ = false;
+  }
+  this->pending_flush_pages_.clear();
 }
 
 void BufferPoolManager::FlushAllPages() {

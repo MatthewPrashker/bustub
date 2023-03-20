@@ -12,6 +12,7 @@
 
 #pragma once
 
+#include <vector>
 #include <list>
 #include <memory>
 #include <mutex>  // NOLINT
@@ -154,6 +155,8 @@ class BufferPoolManager {
    */
   auto FlushPage(page_id_t page_id) -> bool;
 
+  void FlushPageBatch();
+
   /**
    * TODO(P1): Add implementation
    *
@@ -196,6 +199,10 @@ class BufferPoolManager {
   std::list<frame_id_t> free_list_;
   /** This latch protects shared data structures. We recommend updating this comment to describe what it protects. */
   std::mutex latch_;
+
+  std::vector<page_id_t> pending_flush_pages_;
+
+  size_t flush_threshold_;
 
   /**
    * @brief Allocate a page on disk. Caller should acquire the latch before calling this function.
