@@ -555,7 +555,7 @@ void BPLUSTREE_TYPE::MergeNodes(BPlusTreePage *left_page, page_id_t left_page_id
       tmp[i] = {right_page_as_leaf->KeyAt(i), right_page_as_leaf->ValueAt(i)};
     }
     this->AppendEntriesInLeaf(left_page_as_leaf, left_page_id, tmp, nullptr);
-    left_page_as_leaf->SetNextPageId(right_page_id);
+    left_page_as_leaf->SetNextPageId(right_page_as_leaf->GetNextPageId());
 
     std::cout << left_page_as_leaf->ToString() << "\n";
     auto delete_index = this->GetInternalIndexForValue(parent_page, right_page_id);
@@ -697,6 +697,7 @@ void BPLUSTREE_TYPE::CoalescesNode(BPlusTreePage *page, page_id_t page_id, const
   if (right_neighbor) {
     return this->MergeNodes(page, page_id, right_neighbor, right_neighbor_pid, parent_page, parent_pid, ctx);
   }
+  BUSTUB_ASSERT(left_neighbor, "Merging with null left neighbor");
   return this->MergeNodes(left_neighbor, left_neighbor_pid, page, page_id, parent_page, parent_pid, ctx);
 }
 
@@ -739,7 +740,7 @@ auto BPLUSTREE_TYPE::RemoveEntryInInternal(InternalPage *page, page_id_t page_id
   return true;
 }
 
-// TODO(mprashker)
+// TODO(mprashker) Replace with binary search
 INDEX_TEMPLATE_ARGUMENTS
 auto BPLUSTREE_TYPE::RemoveEntryInLeaf(LeafPage *page, page_id_t page_id, const KeyType &key, Context *ctx) -> bool {
   int key_index = -1;
@@ -770,9 +771,48 @@ auto BPLUSTREE_TYPE::RemoveEntryInLeaf(LeafPage *page, page_id_t page_id, const 
   return true;
 }
 
-// TODO(mprashker)
 INDEX_TEMPLATE_ARGUMENTS
-auto BPLUSTREE_TYPE::RemoveOptimistic(const KeyType &key, Transaction *txn) -> bool { return false; }
+auto BPLUSTREE_TYPE::RemoveOptimistic(const KeyType &key, Transaction *txn) -> bool {
+  ReadPageGuard header_guard = this->bpm_->FetchPageRead(this->header_page_id_);
+  auto header_page = header_guard.As<BPlusTreeHeaderPage>();
+  if (header_page->root_page_id_ == INVALID_PAGE_ID) {
+    // If the tree is empty, optimistic insert should fail
+    return false;
+  }
+  ReadPageGuard cur_guard = this->bpm_->FetchPageRead(header_page->root_page_id_);
+  auto cur_page = cur_guard.As<BPlusTreePage>();
+  page_id_t cur_pid = header_page->root_page_id_;
+
+  Context ctx;
+  ctx.root_page_id_ = header_page->root_page_id_;
+  ctx.read_set_.push_back(std::move(header_guard));
+
+  while (!cur_page->IsLeafPage()) {
+    auto internal_page = reinterpret_cast<const InternalPage *>(cur_page);
+    if (!InternalCanAbsorbDelete(internal_page)) {
+      return false;
+    }
+    ctx.read_set_.push_back(std::move(cur_guard));
+    if (ctx.read_set_.size() >= 2) {
+      auto guard = std::move(ctx.read_set_.front());
+      ctx.read_set_.pop_front();
+    }
+
+    // Update cur to child
+    cur_pid = this->GetChildPage(internal_page, key);
+    cur_guard = this->bpm_->FetchPageRead(cur_pid);
+    cur_page = cur_guard.As<BPlusTreePage>();
+  }
+
+  cur_guard.Drop();
+  WritePageGuard leaf_guard = this->bpm_->FetchPageWrite(cur_pid);
+  ctx.UnlockReadSet();
+  auto leaf_page = leaf_guard.AsMut<LeafPage>();
+  if (!this->LeafCanAbsorbDelete(leaf_page)) {
+    return false;
+  }
+  return this->RemoveEntryInLeaf(leaf_page, cur_pid, key, nullptr);
+}
 
 /*
  * Delete key & value pair associated with input key
