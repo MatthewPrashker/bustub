@@ -94,7 +94,7 @@ class BPlusTree {
 
   auto GetLargestKeyInSubTree(const BPlusTreePage *page) const -> KeyType;
 
-  auto GetRootGuardSafe(Context *ctx) -> WritePageGuard;
+  auto GetRootGuardSafe(Context *ctx, bool should_create = true) -> WritePageGuard;
 
   auto GetInternalIndexForKey(const InternalPage *page, const KeyType &key) const -> int;
 
@@ -102,7 +102,7 @@ class BPlusTree {
 
   auto GetChildPage(const InternalPage *page, const KeyType &key) const -> page_id_t;
 
-  auto LeafContainingKey(const KeyType &key) const -> ReadPageGuard;
+  auto LeafContainingKey(const KeyType &key) const -> std::pair<bool, ReadPageGuard>;
 
   auto LeafPageFull(LeafPage *page) const -> bool;
 

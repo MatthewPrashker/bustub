@@ -32,13 +32,16 @@ class IndexIterator {
 
   ~IndexIterator();  // NOLINT
 
-  auto IsEnd() -> bool;
+  auto IsEnd() const -> bool;
 
   auto operator*() -> const MappingType &;
 
   auto operator++() -> IndexIterator &;
 
   auto operator==(const IndexIterator &itr) const -> bool {
+    if (this->IsEnd()) {
+      return itr.IsEnd();
+    }
     return this->page_id_ == itr.page_id_ && this->index_in_page_ == itr.index_in_page_;
   }
 
